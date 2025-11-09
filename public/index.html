@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Massive Wiki</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <!-- Header with breadcrumbs -->
+    <header class="header">
+        <div class="header-content">
+            <h1 class="logo">Massive Wiki</h1>
+            <nav class="breadcrumbs" id="breadcrumbs">
+                <a href="/">Home</a>
+            </nav>
+            <div class="header-actions">
+                <button id="newPageBtn" class="btn btn-small" title="New Page">+ New</button>
+                <button id="editBtn" class="btn btn-small" title="Edit Page">Edit</button>
+                <button id="renameBtn" class="btn btn-small" title="Rename Page">Rename</button>
+                <button id="deleteBtn" class="btn btn-small btn-danger" title="Delete Page">Delete</button>
+                <button id="backupBtn" class="btn btn-small" title="Backup to Git">Backup</button>
+                <button id="adminBtn" class="btn btn-small btn-admin" title="Admin">⚙️ Admin</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main container -->
+    <div class="container">
+        <!-- Content wrapper for sidebar and main -->
+        <div class="content-area">
+            <!-- Sidebar -->
+            <aside class="sidebar" id="sidebar">
+                <div class="sidebar-header">
+                    <h2>Pages</h2>
+                    <button id="refreshTreeBtn" class="btn-icon" title="Refresh">↻</button>
+                </div>
+                <div class="tree" id="tree"></div>
+            </aside>
+
+            <!-- Main content -->
+            <main class="main-content">
+            <div id="viewMode" class="content-view">
+                <div class="content-wrapper">
+                    <article id="content"></article>
+                    <footer id="footer" class="page-footer"></footer>
+                </div>
+                <aside class="right-sidebar" id="rightSidebar">
+                    <div id="sidebarContent"></div>
+                </aside>
+            </div>
+
+            <div id="editMode" class="content-edit" style="display: none;">
+                <div class="editor-path">
+                    <span class="path-label">Editing:</span>
+                    <span id="editorFilePath" class="path-value"></span>
+                </div>
+                <textarea id="editor" placeholder="Write your markdown here..."></textarea>
+                <div class="editor-toolbar">
+                    <button id="saveBtn" class="btn btn-primary">Save</button>
+                    <button id="cancelBtn" class="btn">Cancel</button>
+                    <button id="previewBtn" class="btn">Preview</button>
+                    <button id="imageBtn" class="btn">Insert Image</button>
+                    <a href="https://guides.github.com/features/mastering-markdown/" target="_blank" class="help-link">Markdown Help</a>
+                </div>
+            </div>
+
+            <!-- Admin View -->
+            <div id="adminView" class="admin-view" style="display: none;">
+                <div class="admin-header">
+                    <h2>Admin Panel</h2>
+                    <button id="exitAdminBtn" class="btn">← Back to Wiki</button>
+                </div>
+                <div class="admin-content">
+                    <div class="admin-section">
+                        <h3>Special Pages</h3>
+                        <div class="special-pages-list">
+                            <div class="special-page-item" data-page="_sidebar">
+                                <span class="page-icon">📌</span>
+                                <span class="page-name">Sidebar (_sidebar.md)</span>
+                                <button class="btn btn-small edit-special" data-page="_sidebar">Edit</button>
+                            </div>
+                            <div class="special-page-item" data-page="_footer">
+                                <span class="page-icon">📄</span>
+                                <span class="page-name">Global Footer (_footer.md)</span>
+                                <button class="btn btn-small edit-special" data-page="_footer">Edit</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="admin-section">
+                        <h3>Configuration</h3>
+                        <button id="editConfigBtn" class="btn btn-primary">Edit Config</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+        </div>
+
+        <!-- Global Footer -->
+        <footer class="global-footer" id="globalFooter"></footer>
+    </div>
+
+    <!-- Modals -->
+    <div id="newPageModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Create New Page</h2>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <label for="pageTitle">Page Title:</label>
+                <input type="text" id="pageTitle" placeholder="My New Page">
+
+                <label for="pagePath">Path (use / for folders):</label>
+                <input type="text" id="pagePath" placeholder="category/page-name">
+
+                <p class="help-text">Example: "getting-started/intro" creates intro.md in getting-started folder</p>
+            </div>
+            <div class="modal-footer">
+                <button id="createPageBtn" class="btn btn-primary">Create</button>
+                <button class="modal-close btn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="imageModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Insert Image</h2>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="tabs">
+                    <button class="tab-btn active" data-tab="upload">Upload New</button>
+                    <button class="tab-btn" data-tab="existing">Use Existing</button>
+                </div>
+
+                <div id="uploadTab" class="tab-content active">
+                    <input type="file" id="imageFile" accept="image/*">
+                    <button id="uploadImageBtn" class="btn btn-primary">Upload</button>
+                </div>
+
+                <div id="existingTab" class="tab-content">
+                    <div id="imageList" class="image-list"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="backupModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Backup to Git</h2>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <label for="remoteUrl">Remote Repository URL (optional):</label>
+                <input type="text" id="remoteUrl" placeholder="https://github.com/username/repo.git">
+
+                <label for="commitMessage">Commit Message:</label>
+                <input type="text" id="commitMessage" placeholder="Updated wiki content">
+
+                <p class="help-text">Leave remote URL empty if already configured</p>
+            </div>
+            <div class="modal-footer">
+                <button id="executeBackupBtn" class="btn btn-primary">Backup Now</button>
+                <button class="modal-close btn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="renameModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Rename Page</h2>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <label for="currentPageName">Current Name:</label>
+                <input type="text" id="currentPageName" disabled>
+
+                <label for="newPageName">New Name:</label>
+                <input type="text" id="newPageName" placeholder="new-page-name">
+
+                <p class="help-text">Only letters, numbers, and hyphens allowed. Spaces will be converted to hyphens.</p>
+
+                <div id="referencesInfo" class="references-info" style="display: none;">
+                    <p class="warning-text">⚠️ <strong id="referencesCount">0</strong> page(s) link to this page and will be updated automatically.</p>
+                    <div id="referencesList" class="references-list"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="executeRenameBtn" class="btn btn-primary">Rename</button>
+                <button class="modal-close btn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="deleteModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Delete Page</h2>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="warning-text">⚠️ Are you sure you want to delete this page?</p>
+                <p><strong id="deletePageName"></strong></p>
+                <p class="help-text">This action cannot be undone.</p>
+
+                <div id="deleteWarning" class="references-info" style="display: none;">
+                    <p class="error-text">⚠️ This page has <strong id="childCount">0</strong> child page(s). They will also be deleted.</p>
+                    <div id="childrenList" class="references-list"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="executeDeleteBtn" class="btn btn-danger">Delete Page</button>
+                <button class="modal-close btn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="specialPageModal" class="modal">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h2 id="specialPageTitle">Edit Special Page</h2>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <textarea id="specialPageEditor" rows="15" placeholder="Write markdown here..."></textarea>
+            </div>
+            <div class="modal-footer">
+                <button id="saveSpecialPageBtn" class="btn btn-primary">Save</button>
+                <button class="modal-close btn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="configModal" class="modal">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h2>Edit Configuration</h2>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <textarea id="configEditor" rows="12" placeholder="JSON configuration..."></textarea>
+            </div>
+            <div class="modal-footer">
+                <button id="saveConfigBtn" class="btn btn-primary">Save Config</button>
+                <button class="modal-close btn">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="notification" class="notification"></div>
+
+    <script src="/js/app.js"></script>
+</body>
+</html>
