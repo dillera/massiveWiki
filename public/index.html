@@ -10,7 +10,10 @@
     <!-- Header with breadcrumbs -->
     <header class="header">
         <div class="header-content">
-            <h1 class="logo">Massive Wiki</h1>
+            <div class="logo">
+                <img id="headerLogo" src="" alt="Logo" style="display: none;">
+                <h1 id="headerTitle">Massive Wiki</h1>
+            </div>
             <nav class="breadcrumbs" id="breadcrumbs">
                 <a href="/">Home</a>
             </nav>
@@ -91,6 +94,61 @@
                     <div class="admin-section">
                         <h3>Configuration</h3>
                         <button id="editConfigBtn" class="btn btn-primary">Edit Config</button>
+                    </div>
+
+                    <div class="admin-section">
+                        <h3>Custom Logo</h3>
+                        <div class="logo-controls">
+                            <div id="logoPreview" class="logo-preview" style="display: none;">
+                                <img id="logoImage" src="" alt="Current Logo">
+                            </div>
+                            <div class="logo-actions">
+                                <input type="file" id="logoFile" accept="image/png, image/jpeg" style="display: none;">
+                                <button id="uploadLogoBtn" class="btn btn-primary">Upload Logo</button>
+                                <button id="deleteLogoBtn" class="btn btn-danger" style="display: none;">Delete Logo</button>
+                            </div>
+                            <p class="help-text">Upload a PNG or JPEG logo. Recommended size: 200x50 pixels or similar aspect ratio.</p>
+                        </div>
+                    </div>
+
+                    <div class="admin-section">
+                        <h3>Visual Appearance</h3>
+                        <div class="appearance-controls">
+                            <div class="control-group">
+                                <label for="fontFamilySelect">Font Family:</label>
+                                <select id="fontFamilySelect" class="select-input">
+                                    <option value="system-ui, -apple-system, sans-serif">System Default</option>
+                                    <option value="Georgia, serif">Georgia (Serif)</option>
+                                    <option value="'Times New Roman', serif">Times New Roman</option>
+                                    <option value="Arial, sans-serif">Arial</option>
+                                    <option value="Helvetica, sans-serif">Helvetica</option>
+                                    <option value="Verdana, sans-serif">Verdana</option>
+                                    <option value="'Trebuchet MS', sans-serif">Trebuchet MS</option>
+                                    <option value="'Courier New', monospace">Courier New (Mono)</option>
+                                    <option value="Monaco, monospace">Monaco (Mono)</option>
+                                    <option value="'Comic Sans MS', cursive">Comic Sans MS</option>
+                                    <option value="'Palatino Linotype', serif">Palatino</option>
+                                    <option value="'Segoe UI', sans-serif">Segoe UI</option>
+                                </select>
+                            </div>
+
+                            <div class="control-group">
+                                <label for="fontSizeSelect">Base Font Size:</label>
+                                <select id="fontSizeSelect" class="select-input">
+                                    <option value="8">8pt</option>
+                                    <option value="10">10pt</option>
+                                    <option value="12">12pt</option>
+                                    <option value="14">14pt</option>
+                                    <option value="16" selected>16pt (Default)</option>
+                                    <option value="18">18pt</option>
+                                    <option value="20">20pt</option>
+                                    <option value="22">22pt</option>
+                                </select>
+                            </div>
+
+                            <button id="applyAppearanceBtn" class="btn btn-primary">Apply Changes</button>
+                            <button id="resetAppearanceBtn" class="btn">Reset to Defaults</button>
+                        </div>
                     </div>
                 </div>
             </div>

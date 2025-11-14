@@ -22,6 +22,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     loadGlobalFooter();
     handleRouting();
     setupEventListeners();
+    loadAppearanceSettings();
+    loadLogo();
 
     // Handle browser back/forward
     window.addEventListener('popstate', handleRouting);
@@ -68,6 +70,17 @@ function setupEventListeners() {
     document.getElementById('editConfigBtn').addEventListener('click', openConfigEditor);
     document.getElementById('saveSpecialPageBtn').addEventListener('click', saveSpecialPage);
     document.getElementById('saveConfigBtn').addEventListener('click', saveConfig);
+
+    // Appearance controls
+    document.getElementById('applyAppearanceBtn').addEventListener('click', applyAppearance);
+    document.getElementById('resetAppearanceBtn').addEventListener('click', resetAppearance);
+
+    // Logo controls
+    document.getElementById('uploadLogoBtn').addEventListener('click', () => {
+        document.getElementById('logoFile').click();
+    });
+    document.getElementById('logoFile').addEventListener('change', uploadLogo);
+    document.getElementById('deleteLogoBtn').addEventListener('click', deleteLogo);
 
     // Preview button
     document.getElementById('previewBtn').addEventListener('click', openPreview);
@@ -868,6 +881,9 @@ function openAdmin() {
     document.getElementById('viewMode').style.display = 'none';
     document.getElementById('editMode').style.display = 'none';
     document.getElementById('adminView').style.display = 'block';
+
+    // Reload logo preview in admin panel
+    loadLogo();
 }
 
 function exitAdmin() {
@@ -964,6 +980,151 @@ async function saveConfig() {
         } else {
             showNotification('Error saving config', 'error');
         }
+        console.error(error);
+    }
+}
+
+// Appearance management
+function loadAppearanceSettings() {
+    const savedFont = localStorage.getItem('wikiFont');
+    const savedSize = localStorage.getItem('wikiFontSize');
+
+    if (savedFont) {
+        document.documentElement.style.setProperty('--font-family', savedFont);
+        document.getElementById('fontFamilySelect').value = savedFont;
+    }
+
+    if (savedSize) {
+        document.documentElement.style.setProperty('--base-font-size', savedSize + 'px');
+        document.getElementById('fontSizeSelect').value = savedSize;
+    }
+}
+
+function applyAppearance() {
+    const fontFamily = document.getElementById('fontFamilySelect').value;
+    const fontSize = document.getElementById('fontSizeSelect').value;
+
+    document.documentElement.style.setProperty('--font-family', fontFamily);
+    document.documentElement.style.setProperty('--base-font-size', fontSize + 'px');
+
+    localStorage.setItem('wikiFont', fontFamily);
+    localStorage.setItem('wikiFontSize', fontSize);
+
+    showNotification('Appearance updated successfully', 'success');
+}
+
+function resetAppearance() {
+    const defaultFont = 'system-ui, -apple-system, sans-serif';
+    const defaultSize = '16';
+
+    document.documentElement.style.setProperty('--font-family', defaultFont);
+    document.documentElement.style.setProperty('--base-font-size', defaultSize + 'px');
+
+    document.getElementById('fontFamilySelect').value = defaultFont;
+    document.getElementById('fontSizeSelect').value = defaultSize;
+
+    localStorage.removeItem('wikiFont');
+    localStorage.removeItem('wikiFontSize');
+
+    showNotification('Appearance reset to defaults', 'success');
+}
+
+// Logo management
+async function loadLogo() {
+    try {
+        const response = await fetch('/api/logo');
+        const data = await response.json();
+
+        if (data.exists) {
+            // Show logo in header
+            const headerLogo = document.getElementById('headerLogo');
+            const headerTitle = document.getElementById('headerTitle');
+            headerLogo.src = data.url;
+            headerLogo.style.display = 'block';
+            headerTitle.style.display = 'none';
+
+            // Show logo in admin preview
+            const logoPreview = document.getElementById('logoPreview');
+            const logoImage = document.getElementById('logoImage');
+            const deleteBtn = document.getElementById('deleteLogoBtn');
+            logoImage.src = data.url;
+            logoPreview.style.display = 'flex';
+            deleteBtn.style.display = 'inline-block';
+        } else {
+            // No logo, show text title
+            const headerLogo = document.getElementById('headerLogo');
+            const headerTitle = document.getElementById('headerTitle');
+            headerLogo.style.display = 'none';
+            headerTitle.style.display = 'block';
+
+            // Hide preview in admin
+            const logoPreview = document.getElementById('logoPreview');
+            const deleteBtn = document.getElementById('deleteLogoBtn');
+            logoPreview.style.display = 'none';
+            deleteBtn.style.display = 'none';
+        }
+    } catch (error) {
+        console.error('Error loading logo:', error);
+    }
+}
+
+async function uploadLogo() {
+    const fileInput = document.getElementById('logoFile');
+    const file = fileInput.files[0];
+
+    if (!file) {
+        return;
+    }
+
+    // Validate file type
+    if (!file.type.match(/image\/(png|jpeg|jpg)/)) {
+        showNotification('Please upload a PNG or JPEG image', 'error');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('logo', file);
+
+    try {
+        const response = await fetch('/api/logo/upload', {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response.ok) throw new Error('Failed to upload logo');
+
+        const data = await response.json();
+        showNotification('Logo uploaded successfully', 'success');
+
+        // Reload logo in header and admin panel
+        await loadLogo();
+
+        // Clear file input
+        fileInput.value = '';
+    } catch (error) {
+        showNotification('Error uploading logo', 'error');
+        console.error(error);
+    }
+}
+
+async function deleteLogo() {
+    if (!confirm('Are you sure you want to delete the logo?')) {
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/logo', {
+            method: 'DELETE'
+        });
+
+        if (!response.ok) throw new Error('Failed to delete logo');
+
+        showNotification('Logo deleted successfully', 'success');
+
+        // Reload logo display
+        await loadLogo();
+    } catch (error) {
+        showNotification('Error deleting logo', 'error');
         console.error(error);
     }
 }

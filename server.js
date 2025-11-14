@@ -935,6 +935,77 @@ app.get('/api/images', async (req, res) => {
   }
 });
 
+// API: Upload logo
+app.post('/api/logo/upload', (req, res) => {
+  upload.single('logo')(req, res, async (err) => {
+    if (err) {
+      console.error('Multer error:', err);
+      return res.status(500).json({ error: 'Failed to upload logo', details: err.message });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    try {
+      // Remove any existing logo files
+      const files = await fs.readdir(IMAGES_DIR);
+      const existingLogos = files.filter(f => f.startsWith('_logo.'));
+      for (const logo of existingLogos) {
+        await fs.unlink(path.join(IMAGES_DIR, logo));
+      }
+
+      // Rename uploaded file to _logo.<ext>
+      const ext = path.extname(req.file.filename);
+      const logoName = `_logo${ext}`;
+      const oldPath = path.join(IMAGES_DIR, req.file.filename);
+      const newPath = path.join(IMAGES_DIR, logoName);
+
+      await fs.rename(oldPath, newPath);
+
+      const logoUrl = `/images/${logoName}`;
+      res.json({ success: true, url: logoUrl, filename: logoName });
+    } catch (error) {
+      console.error('Error processing logo:', error);
+      res.status(500).json({ error: 'Failed to process logo' });
+    }
+  });
+});
+
+// API: Get logo
+app.get('/api/logo', async (req, res) => {
+  try {
+    const files = await fs.readdir(IMAGES_DIR);
+    const logo = files.find(f => f.startsWith('_logo.') && /\.(jpg|jpeg|png)$/i.test(f));
+
+    if (logo) {
+      res.json({ exists: true, url: `/images/${logo}` });
+    } else {
+      res.json({ exists: false });
+    }
+  } catch (error) {
+    console.error('Error checking logo:', error);
+    res.status(500).json({ error: 'Failed to check logo' });
+  }
+});
+
+// API: Delete logo
+app.delete('/api/logo', async (req, res) => {
+  try {
+    const files = await fs.readdir(IMAGES_DIR);
+    const existingLogos = files.filter(f => f.startsWith('_logo.'));
+
+    for (const logo of existingLogos) {
+      await fs.unlink(path.join(IMAGES_DIR, logo));
+    }
+
+    res.json({ success: true, message: 'Logo deleted' });
+  } catch (error) {
+    console.error('Error deleting logo:', error);
+    res.status(500).json({ error: 'Failed to delete logo' });
+  }
+});
+
 // API: Git operations
 app.post('/api/git/init', async (req, res) => {
   try {
