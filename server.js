@@ -1,3 +1,5 @@
+require('dotenv').config();
+
 const express = require('express');
 const fs = require('fs').promises;
 const fsSync = require('fs');
@@ -6,10 +8,41 @@ const { marked } = require('marked');
 const { exec } = require('child_process');
 const util = require('util');
 const multer = require('multer');
+const { createClient } = require('@supabase/supabase-js');
 
 const execPromise = util.promisify(exec);
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Initialize Supabase client
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY
+);
+
+// Middleware to verify JWT token from Supabase
+async function verifyAuth(req) {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return null;
+  }
+
+  const token = authHeader.substring(7);
+
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+
+    if (error || !user) {
+      return null;
+    }
+
+    return user;
+  } catch (error) {
+    console.error('Error verifying token:', error);
+    return null;
+  }
+}
 
 // Parse command line arguments for --home parameter
 function parseArgs() {
@@ -168,6 +201,39 @@ Browse pages using the left sidebar tree view.
     await fs.writeFile(path.join(WIKI_DIR, '_footer.md'), footerContent, 'utf-8');
     console.log('✓ Created _footer.md');
 
+    // Create secure.md (protected page)
+    const secureContent = `# Secure Page
+
+🔒 This is a protected page that requires authentication to view.
+
+## Authentication Status
+
+This page is automatically protected when authentication is enabled in the Admin panel.
+
+## How Authentication Works
+
+1. Go to the **Admin Panel** (⚙️ button in the header)
+2. Navigate to the **Authentication** section
+3. Follow the setup instructions to configure Supabase
+4. Toggle **Enable Authentication** and save
+5. Create user accounts via the Supabase dashboard links
+6. Log in to access this page
+
+## What's Protected
+
+When authentication is enabled, this "Secure" page requires login to view. You can add more pages to the protected list by editing the configuration.
+
+## Managing Users
+
+Once Supabase is configured, you can manage users through the links in the Admin panel:
+- Add new users
+- Reset passwords
+- Configure security policies
+- Set up email templates
+`;
+    await fs.writeFile(path.join(PAGES_DIR, 'secure.md'), secureContent, 'utf-8');
+    console.log('✓ Created secure.md (protected page)');
+
     // Create _config.json
     const config = {
       wikiName: "Massive Wiki",
@@ -176,7 +242,9 @@ Browse pages using the left sidebar tree view.
       showGlobalFooter: true,
       theme: "default",
       enableWikilinks: true,
-      defaultHomePage: "home"
+      defaultHomePage: "home",
+      authEnabled: false,
+      protectedPages: ["secure"]
     };
     await fs.writeFile(path.join(WIKI_DIR, '_config.json'), JSON.stringify(config, null, 2), 'utf-8');
     console.log('✓ Created _config.json');
@@ -532,6 +600,30 @@ app.get('/api/page/*', async (req, res) => {
 
     // Remove leading slash if present
     if (pagePath.startsWith('/')) pagePath = pagePath.slice(1);
+
+    // Check if page is protected and requires authentication
+    try {
+      const configPath = path.join(WIKI_DIR, '_config.json');
+      const configContent = await fs.readFile(configPath, 'utf-8');
+      const config = JSON.parse(configContent);
+
+      // If auth is enabled and page is protected
+      if (config.authEnabled && config.protectedPages && config.protectedPages.includes(pagePath)) {
+        const user = await verifyAuth(req);
+
+        if (!user) {
+          return res.status(401).json({
+            error: 'Authentication required',
+            message: 'This page requires authentication to view. Please log in.'
+          });
+        }
+
+        console.log(`User ${user.email} accessing protected page: ${pagePath}`);
+      }
+    } catch (configError) {
+      console.error('Error checking auth config:', configError);
+      // Continue without auth check if config is missing
+    }
 
     const filePath = path.join(PAGES_DIR, pagePath + '.md');
 
@@ -899,6 +991,33 @@ app.post('/api/config', async (req, res) => {
   } catch (error) {
     console.error('Error saving config:', error);
     res.status(500).json({ error: 'Failed to save config' });
+  }
+});
+
+// API: Get Supabase config for client
+app.get('/api/auth/config', async (req, res) => {
+  try {
+    // Load wiki config to check if auth is enabled
+    const configPath = path.join(WIKI_DIR, '_config.json');
+    let authEnabled = false;
+
+    try {
+      const configContent = await fs.readFile(configPath, 'utf-8');
+      const config = JSON.parse(configContent);
+      authEnabled = config.authEnabled || false;
+    } catch {
+      authEnabled = false;
+    }
+
+    res.json({
+      authEnabled,
+      supabaseUrl: process.env.SUPABASE_URL || null,
+      supabaseAnonKey: process.env.SUPABASE_ANON_KEY || null,
+      hasSupabaseConfig: !!(process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY)
+    });
+  } catch (error) {
+    console.error('Error loading auth config:', error);
+    res.status(500).json({ error: 'Failed to load auth config' });
   }
 });
 

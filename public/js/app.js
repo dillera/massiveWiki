@@ -71,6 +71,9 @@ function setupEventListeners() {
     document.getElementById('saveSpecialPageBtn').addEventListener('click', saveSpecialPage);
     document.getElementById('saveConfigBtn').addEventListener('click', saveConfig);
 
+    // Auth configuration
+    document.getElementById('saveAuthConfigBtn').addEventListener('click', saveAuthConfig);
+
     // Appearance controls
     document.getElementById('applyAppearanceBtn').addEventListener('click', applyAppearance);
     document.getElementById('resetAppearanceBtn').addEventListener('click', resetAppearance);
@@ -128,7 +131,14 @@ function navigateTo(path) {
 // Load page content
 async function loadPage(path) {
     try {
-        const response = await fetch(`/api/page/${path}`);
+        // Get auth token if available
+        const token = await getAccessToken();
+        const headers = {};
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+
+        const response = await fetch(`/api/page/${path}`, { headers });
 
         if (!response.ok) {
             if (response.status === 404) {
@@ -136,6 +146,18 @@ async function loadPage(path) {
                     <h1>Page Not Found</h1>
                     <p>The page "${path}" doesn't exist yet.</p>
                     <button onclick="createPageAtPath('${path}')" class="btn btn-primary">Create This Page</button>
+                `;
+                footer.innerHTML = '';
+                return;
+            }
+            if (response.status === 401) {
+                const errorData = await response.json();
+                content.innerHTML = `
+                    <div style="text-align: center; padding: 2rem;">
+                        <h1>🔒 Authentication Required</h1>
+                        <p>${errorData.message || 'This page requires authentication to view.'}</p>
+                        <button onclick="openModal('loginModal')" class="btn btn-primary">Log In</button>
+                    </div>
                 `;
                 footer.innerHTML = '';
                 return;
@@ -884,6 +906,9 @@ function openAdmin() {
 
     // Reload logo preview in admin panel
     loadLogo();
+
+    // Load auth configuration status
+    loadAuthStatus();
 }
 
 function exitAdmin() {
@@ -981,6 +1006,76 @@ async function saveConfig() {
             showNotification('Error saving config', 'error');
         }
         console.error(error);
+    }
+}
+
+// Auth Configuration Management
+async function loadAuthStatus() {
+    try {
+        const response = await fetch('/api/auth/config');
+        const authConfig = await response.json();
+
+        const toggle = document.getElementById('authEnabledToggle');
+        const statusText = document.getElementById('authStatusText');
+        const supabaseStatus = document.getElementById('supabaseStatus');
+        const setupInstructions = document.getElementById('authSetupInstructions');
+        const managementLinks = document.getElementById('authManagementLinks');
+
+        // Set toggle state
+        toggle.checked = authConfig.authEnabled;
+
+        // Update status display
+        if (authConfig.hasSupabaseConfig) {
+            supabaseStatus.innerHTML = '<strong>Supabase:</strong> <span style="color: green;">✓ Configured</span>';
+            setupInstructions.style.display = 'none';
+            managementLinks.style.display = 'block';
+        } else {
+            supabaseStatus.innerHTML = '<strong>Supabase:</strong> <span style="color: orange;">⚠ Not Configured</span>';
+            setupInstructions.style.display = 'block';
+            managementLinks.style.display = 'none';
+        }
+
+        if (authConfig.authEnabled) {
+            statusText.innerHTML = '<span style="color: green;">Enabled</span>';
+        } else {
+            statusText.innerHTML = '<span style="color: gray;">Disabled</span>';
+        }
+
+    } catch (error) {
+        console.error('Error loading auth status:', error);
+    }
+}
+
+async function saveAuthConfig() {
+    try {
+        const authEnabled = document.getElementById('authEnabledToggle').checked;
+
+        // Load current config
+        const configResponse = await fetch('/api/config');
+        const config = await configResponse.json();
+
+        // Update auth setting
+        config.authEnabled = authEnabled;
+
+        // Save config
+        const saveResponse = await fetch('/api/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+        });
+
+        if (!saveResponse.ok) throw new Error('Failed to save config');
+
+        showNotification('Authentication settings saved. Please reload the page.', 'success');
+
+        // Reload after a short delay
+        setTimeout(() => {
+            window.location.reload();
+        }, 1500);
+
+    } catch (error) {
+        console.error('Error saving auth config:', error);
+        showNotification('Failed to save authentication settings', 'error');
     }
 }
 
