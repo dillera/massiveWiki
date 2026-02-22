@@ -5,12 +5,12 @@ const fs = require('fs').promises;
 const fsSync = require('fs');
 const path = require('path');
 const { marked } = require('marked');
-const { exec } = require('child_process');
+const { execFile } = require('child_process');
 const util = require('util');
 const multer = require('multer');
 const { createClient } = require('@supabase/supabase-js');
 
-const execPromise = util.promisify(exec);
+const execFilePromise = util.promisify(execFile);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -42,6 +42,30 @@ async function verifyAuth(req) {
     console.error('Error verifying token:', error);
     return null;
   }
+}
+
+// Middleware: require a valid Supabase session for mutating endpoints
+async function requireAuth(req, res, next) {
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
+    return res.status(503).json({ error: 'Authentication not configured on this server.' });
+  }
+  const user = await verifyAuth(req);
+  if (!user) {
+    return res.status(401).json({ error: 'Authentication required', message: 'You must be logged in to perform this action.' });
+  }
+  req.user = user;
+  next();
+}
+
+// Resolve a user-supplied relative path against a trusted base directory.
+// Returns the resolved absolute path, or null if the path would escape baseDir.
+function safePath(baseDir, userInput) {
+  const base = path.resolve(baseDir);
+  const resolved = path.resolve(path.join(baseDir, userInput));
+  if (resolved !== base && !resolved.startsWith(base + path.sep)) {
+    return null;
+  }
+  return resolved;
 }
 
 // Parse command line arguments for --home parameter
@@ -375,7 +399,8 @@ async function processWikilinks(content, currentPagePath) {
 
 // Helper function to check if a page exists
 async function pageExists(pagePath) {
-  const filePath = path.join(PAGES_DIR, pagePath + '.md');
+  const filePath = safePath(PAGES_DIR, pagePath + '.md');
+  if (!filePath) return false;
   try {
     await fs.access(filePath);
     return true;
@@ -625,7 +650,10 @@ app.get('/api/page/*', async (req, res) => {
       // Continue without auth check if config is missing
     }
 
-    const filePath = path.join(PAGES_DIR, pagePath + '.md');
+    const filePath = safePath(PAGES_DIR, pagePath + '.md');
+    if (!filePath) {
+      return res.status(400).json({ error: 'Invalid page path' });
+    }
 
     // Check if file exists
     try {
@@ -667,12 +695,15 @@ app.get('/api/page/*', async (req, res) => {
 });
 
 // API: Save page
-app.post('/api/page/*', async (req, res) => {
+app.post('/api/page/*', requireAuth, async (req, res) => {
   try {
     let pagePath = req.params[0] || 'home';
     if (pagePath.startsWith('/')) pagePath = pagePath.slice(1);
 
-    const filePath = path.join(PAGES_DIR, pagePath + '.md');
+    const filePath = safePath(PAGES_DIR, pagePath + '.md');
+    if (!filePath) {
+      return res.status(400).json({ error: 'Invalid page path' });
+    }
     const { content } = req.body;
 
     if (!content) {
@@ -699,6 +730,10 @@ app.get('/api/exists/*', async (req, res) => {
     let pagePath = req.params[0];
     if (pagePath.startsWith('/')) pagePath = pagePath.slice(1);
 
+    if (!safePath(PAGES_DIR, pagePath + '.md')) {
+      return res.status(400).json({ error: 'Invalid page path' });
+    }
+
     const exists = await pageExists(pagePath);
     res.json({ exists });
   } catch (error) {
@@ -708,7 +743,7 @@ app.get('/api/exists/*', async (req, res) => {
 });
 
 // API: Create new page
-app.post('/api/create', async (req, res) => {
+app.post('/api/create', requireAuth, async (req, res) => {
   try {
     const { path: pagePath, title } = req.body;
 
@@ -716,7 +751,10 @@ app.post('/api/create', async (req, res) => {
       return res.status(400).json({ error: 'Path is required' });
     }
 
-    const filePath = path.join(PAGES_DIR, pagePath + '.md');
+    const filePath = safePath(PAGES_DIR, pagePath + '.md');
+    if (!filePath) {
+      return res.status(400).json({ error: 'Invalid page path' });
+    }
 
     // Check if file already exists
     try {
@@ -745,7 +783,7 @@ app.post('/api/create', async (req, res) => {
 });
 
 // API: Delete page
-app.delete('/api/page/*', async (req, res) => {
+app.delete('/api/page/*', requireAuth, async (req, res) => {
   try {
     let pagePath = req.params[0];
     if (pagePath.startsWith('/')) pagePath = pagePath.slice(1);
@@ -754,8 +792,14 @@ app.delete('/api/page/*', async (req, res) => {
       return res.status(400).json({ error: 'Cannot delete home page' });
     }
 
-    const filePath = path.join(PAGES_DIR, pagePath + '.md');
-    const folderPath = path.join(PAGES_DIR, pagePath);
+    const filePath = safePath(PAGES_DIR, pagePath + '.md');
+    if (!filePath) {
+      return res.status(400).json({ error: 'Invalid page path' });
+    }
+    const folderPath = safePath(PAGES_DIR, pagePath);
+    if (!folderPath) {
+      return res.status(400).json({ error: 'Invalid page path' });
+    }
 
     // Delete the .md file if it exists
     try {
@@ -841,7 +885,7 @@ app.get('/api/references/*', async (req, res) => {
 });
 
 // API: Rename page
-app.post('/api/rename', async (req, res) => {
+app.post('/api/rename', requireAuth, async (req, res) => {
   try {
     const { oldPath, newName } = req.body;
 
@@ -871,10 +915,14 @@ app.post('/api/rename', async (req, res) => {
       return res.status(400).json({ error: 'A page with this name already exists' });
     }
 
-    const oldFilePath = path.join(PAGES_DIR, oldPath + '.md');
-    const newFilePath = path.join(PAGES_DIR, newPath + '.md');
-    const oldFolderPath = path.join(PAGES_DIR, oldPath);
-    const newFolderPath = path.join(PAGES_DIR, newPath);
+    const oldFilePath = safePath(PAGES_DIR, oldPath + '.md');
+    const newFilePath = safePath(PAGES_DIR, newPath + '.md');
+    const oldFolderPath = safePath(PAGES_DIR, oldPath);
+    const newFolderPath = safePath(PAGES_DIR, newPath);
+
+    if (!oldFilePath || !newFilePath || !oldFolderPath || !newFolderPath) {
+      return res.status(400).json({ error: 'Invalid page path' });
+    }
 
     // Check if old file exists
     try {
@@ -917,7 +965,10 @@ app.post('/api/rename', async (req, res) => {
 app.get('/api/special/:page', async (req, res) => {
   try {
     const { page } = req.params;
-    const filePath = path.join(WIKI_DIR, `${page}.md`);
+    const filePath = safePath(WIKI_DIR, `${page}.md`);
+    if (!filePath) {
+      return res.status(400).json({ error: 'Invalid page name' });
+    }
 
     try {
       const content = await fs.readFile(filePath, 'utf-8');
@@ -933,7 +984,7 @@ app.get('/api/special/:page', async (req, res) => {
 });
 
 // API: Save special page
-app.post('/api/special/:page', async (req, res) => {
+app.post('/api/special/:page', requireAuth, async (req, res) => {
   try {
     const { page } = req.params;
     const { content } = req.body;
@@ -942,7 +993,10 @@ app.post('/api/special/:page', async (req, res) => {
       return res.status(400).json({ error: 'Content is required' });
     }
 
-    const filePath = path.join(WIKI_DIR, `${page}.md`);
+    const filePath = safePath(WIKI_DIR, `${page}.md`);
+    if (!filePath) {
+      return res.status(400).json({ error: 'Invalid page name' });
+    }
     await fs.writeFile(filePath, content, 'utf-8');
 
     res.json({ success: true });
@@ -980,7 +1034,7 @@ app.get('/api/config', async (req, res) => {
 });
 
 // API: Save config
-app.post('/api/config', async (req, res) => {
+app.post('/api/config', requireAuth, async (req, res) => {
   try {
     const config = req.body;
 
@@ -1022,7 +1076,7 @@ app.get('/api/auth/config', async (req, res) => {
 });
 
 // API: Upload image
-app.post('/api/upload-image', (req, res) => {
+app.post('/api/upload-image', requireAuth, (req, res) => {
   upload.single('image')(req, res, (err) => {
     if (err) {
       console.error('Multer error:', err);
@@ -1055,7 +1109,7 @@ app.get('/api/images', async (req, res) => {
 });
 
 // API: Upload logo
-app.post('/api/logo/upload', (req, res) => {
+app.post('/api/logo/upload', requireAuth, (req, res) => {
   upload.single('logo')(req, res, async (err) => {
     if (err) {
       console.error('Multer error:', err);
@@ -1109,7 +1163,7 @@ app.get('/api/logo', async (req, res) => {
 });
 
 // API: Delete logo
-app.delete('/api/logo', async (req, res) => {
+app.delete('/api/logo', requireAuth, async (req, res) => {
   try {
     const files = await fs.readdir(IMAGES_DIR);
     const existingLogos = files.filter(f => f.startsWith('_logo.'));
@@ -1126,11 +1180,11 @@ app.delete('/api/logo', async (req, res) => {
 });
 
 // API: Git operations
-app.post('/api/git/init', async (req, res) => {
+app.post('/api/git/init', requireAuth, async (req, res) => {
   try {
-    await execPromise('git init');
-    await execPromise('git add .');
-    await execPromise('git commit -m "Initial commit"');
+    await execFilePromise('git', ['init'], { cwd: WIKI_HOME });
+    await execFilePromise('git', ['add', '.'], { cwd: WIKI_HOME });
+    await execFilePromise('git', ['commit', '-m', 'Initial commit'], { cwd: WIKI_HOME });
     res.json({ success: true, message: 'Git repository initialized' });
   } catch (error) {
     console.error('Error initializing git:', error);
@@ -1138,28 +1192,42 @@ app.post('/api/git/init', async (req, res) => {
   }
 });
 
-app.post('/api/git/backup', async (req, res) => {
+app.post('/api/git/backup', requireAuth, async (req, res) => {
   try {
     const { remote, message } = req.body;
 
-    // Add all changes
-    await execPromise('git add .');
+    // Validate remote URL format if provided
+    if (remote && !/^(https?:\/\/|git@|ssh:\/\/)[\w.@:/~-]+$/.test(remote)) {
+      return res.status(400).json({ error: 'Invalid remote URL format' });
+    }
 
-    // Commit
-    const commitMessage = message || `Backup ${new Date().toISOString()}`;
-    await execPromise(`git commit -m "${commitMessage}" || true`); // Don't fail if nothing to commit
+    const commitMessage = (typeof message === 'string' && message.trim())
+      ? message.trim()
+      : `Backup ${new Date().toISOString()}`;
+
+    // Add all changes
+    await execFilePromise('git', ['add', '.'], { cwd: WIKI_HOME });
+
+    // Commit — ignore failure when there is nothing new to commit
+    try {
+      await execFilePromise('git', ['commit', '-m', commitMessage], { cwd: WIKI_HOME });
+    } catch {
+      // Nothing to commit, that's ok
+    }
 
     // Push if remote is provided
     if (remote) {
-      // Check if remote exists
       try {
-        await execPromise('git remote get-url origin');
+        await execFilePromise('git', ['remote', 'get-url', 'origin'], { cwd: WIKI_HOME });
       } catch {
-        // Remote doesn't exist, add it
-        await execPromise(`git remote add origin ${remote}`);
+        await execFilePromise('git', ['remote', 'add', 'origin', remote], { cwd: WIKI_HOME });
       }
 
-      await execPromise('git push -u origin main || git push -u origin master');
+      try {
+        await execFilePromise('git', ['push', '-u', 'origin', 'main'], { cwd: WIKI_HOME });
+      } catch {
+        await execFilePromise('git', ['push', '-u', 'origin', 'master'], { cwd: WIKI_HOME });
+      }
     }
 
     res.json({ success: true, message: 'Backup completed' });
@@ -1169,9 +1237,9 @@ app.post('/api/git/backup', async (req, res) => {
   }
 });
 
-app.get('/api/git/status', async (req, res) => {
+app.get('/api/git/status', requireAuth, async (req, res) => {
   try {
-    const { stdout } = await execPromise('git status --porcelain');
+    const { stdout } = await execFilePromise('git', ['status', '--porcelain'], { cwd: WIKI_HOME });
     const hasChanges = stdout.trim().length > 0;
     res.json({ hasChanges, status: stdout });
   } catch (error) {

@@ -14,6 +14,16 @@ const editMode = document.getElementById('editMode');
 const editor = document.getElementById('editor');
 const notification = document.getElementById('notification');
 
+// Authenticated fetch — attaches the Supabase Bearer token to write requests
+async function authFetch(url, options = {}) {
+    const token = await getAccessToken();
+    const headers = { ...(options.headers || {}) };
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+    return fetch(url, { ...options, headers });
+}
+
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
     await loadConfig();
@@ -205,7 +215,7 @@ async function handleWikilinkClick(e) {
     } else {
         // Page doesn't exist, create it first
         try {
-            const response = await fetch('/api/create', {
+            const response = await authFetch('/api/create', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ path: pagePath, title: title })
@@ -428,7 +438,7 @@ async function savePage() {
     const raw = editor.value;
 
     try {
-        const response = await fetch(`/api/page/${currentPage}`, {
+        const response = await authFetch(`/api/page/${currentPage}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ content: raw })
@@ -512,7 +522,7 @@ async function createNewPage() {
     }
 
     try {
-        const response = await fetch('/api/create', {
+        const response = await authFetch('/api/create', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ path, title })
@@ -579,7 +589,7 @@ async function uploadImage() {
     formData.append('image', file);
 
     try {
-        const response = await fetch('/api/upload-image', {
+        const response = await authFetch('/api/upload-image', {
             method: 'POST',
             body: formData
         });
@@ -617,7 +627,7 @@ async function executeBackup() {
     const message = document.getElementById('commitMessage').value.trim();
 
     try {
-        const response = await fetch('/api/git/backup', {
+        const response = await authFetch('/api/git/backup', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ remote, message })
@@ -704,7 +714,7 @@ async function executerename() {
     }
 
     try {
-        const response = await fetch('/api/rename', {
+        const response = await authFetch('/api/rename', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -773,7 +783,7 @@ async function openDeleteModal() {
 
 async function executeDelete() {
     try {
-        const response = await fetch(`/api/page/${currentPage}`, {
+        const response = await authFetch(`/api/page/${currentPage}`, {
             method: 'DELETE'
         });
 
@@ -940,7 +950,7 @@ async function saveSpecialPage() {
     const content = document.getElementById('specialPageEditor').value;
 
     try {
-        const response = await fetch(`/api/special/${currentSpecialPage}`, {
+        const response = await authFetch(`/api/special/${currentSpecialPage}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ content })
@@ -984,7 +994,7 @@ async function saveConfig() {
     try {
         const config = JSON.parse(configText);
 
-        const response = await fetch('/api/config', {
+        const response = await authFetch('/api/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(config)
@@ -1058,7 +1068,7 @@ async function saveAuthConfig() {
         config.authEnabled = authEnabled;
 
         // Save config
-        const saveResponse = await fetch('/api/config', {
+        const saveResponse = await authFetch('/api/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(config)
@@ -1181,7 +1191,7 @@ async function uploadLogo() {
     formData.append('logo', file);
 
     try {
-        const response = await fetch('/api/logo/upload', {
+        const response = await authFetch('/api/logo/upload', {
             method: 'POST',
             body: formData
         });
@@ -1208,7 +1218,7 @@ async function deleteLogo() {
     }
 
     try {
-        const response = await fetch('/api/logo', {
+        const response = await authFetch('/api/logo', {
             method: 'DELETE'
         });
 
