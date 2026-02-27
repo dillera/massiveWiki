@@ -9,6 +9,9 @@ const { execFile } = require('child_process');
 const util = require('util');
 const multer = require('multer');
 const { createClient } = require('@supabase/supabase-js');
+const sanitizeHtml = require('sanitize-html');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 
 const execFilePromise = util.promisify(execFile);
 const app = express();
@@ -19,6 +22,87 @@ const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_ANON_KEY
 );
+
+// ---------------------------------------------------------------------------
+// XSS: sanitize HTML produced by marked before sending to clients.
+// We use an allowlist of safe tags and attributes; everything else is stripped.
+// ---------------------------------------------------------------------------
+const SANITIZE_OPTIONS = {
+  allowedTags: [
+    // Headings / structure
+    'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+    'p', 'blockquote', 'pre', 'hr', 'br', 'div', 'article', 'section',
+    'ul', 'ol', 'li', 'dl', 'dt', 'dd',
+    'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td', 'colgroup', 'col', 'caption',
+    'figure', 'figcaption',
+    // Inline
+    'a', 'em', 'strong', 'code', 'kbd', 'del', 's', 'ins', 'mark',
+    'span', 'abbr', 'cite', 'sub', 'sup', 'small', 'b', 'i', 'u',
+    // Media
+    'img',
+  ],
+  allowedAttributes: {
+    // wikilinks use class / data-page / data-exists
+    'a': ['href', 'title', 'target', 'rel', 'class', 'data-page', 'data-exists'],
+    'img': ['src', 'alt', 'title', 'width', 'height'],
+    // syntax-highlighting libraries add classes
+    'code': ['class'],
+    'pre':  ['class'],
+    'span': ['class'],
+    'div':  ['class'],
+    'th': ['align', 'scope'],
+    'td': ['align'],
+    'col': ['span'],
+    'table': ['class'],
+  },
+  allowedSchemes: ['http', 'https', 'mailto'],
+  allowedSchemesByTag: {
+    'img': ['http', 'https', 'data'],
+    'a':   ['http', 'https', 'mailto'],
+  },
+  allowProtocolRelative: false, // blocks //evil.com hrefs
+};
+
+function sanitize(html) {
+  return sanitizeHtml(html, SANITIZE_OPTIONS);
+}
+
+// ---------------------------------------------------------------------------
+// File upload: only allow genuine image types; SVG is excluded because
+// browsers execute <script> inside SVG served with the image/svg+xml MIME type.
+// ---------------------------------------------------------------------------
+const ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+const ALLOWED_EXTENSIONS = /\.(jpe?g|png|gif|webp)$/i;
+
+function imageFilter(req, file, cb) {
+  if (!ALLOWED_MIME_TYPES.has(file.mimetype) || !ALLOWED_EXTENSIONS.test(file.originalname)) {
+    return cb(Object.assign(new Error('Only JPEG, PNG, GIF and WebP images are allowed'), { code: 'INVALID_FILE_TYPE' }), false);
+  }
+  cb(null, true);
+}
+
+// ---------------------------------------------------------------------------
+// Rate limiting — limits are configurable via env so tests can use low values.
+// ---------------------------------------------------------------------------
+const READ_LIMIT_MAX  = parseInt(process.env.RATE_LIMIT_MAX       || '500', 10);
+const WRITE_LIMIT_MAX = parseInt(process.env.RATE_LIMIT_WRITE_MAX || '60',  10);
+const LIMIT_WINDOW_MS = parseInt(process.env.RATE_LIMIT_WINDOW_MS || String(15 * 60 * 1000), 10);
+
+const readLimiter = rateLimit({
+  windowMs: LIMIT_WINDOW_MS,
+  max: READ_LIMIT_MAX,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' },
+});
+
+const writeLimiter = rateLimit({
+  windowMs: LIMIT_WINDOW_MS,
+  max: WRITE_LIMIT_MAX,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' },
+});
 
 // Middleware to verify JWT token from Supabase
 async function verifyAuth(req) {
@@ -284,12 +368,36 @@ const storage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
+    // Always lowercase the extension to avoid .JPG / .PNG surprises
+    cb(null, uniqueSuffix + path.extname(file.originalname).toLowerCase());
   }
 });
-const upload = multer({ storage: storage });
+const upload = multer({
+  storage,
+  fileFilter: imageFilter,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB max
+});
 
 // Middleware
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc:  ["'self'"],
+      // 'unsafe-inline' is required by the openPreview() document.write() feature
+      scriptSrc:   ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
+      styleSrc:    ["'self'", "'unsafe-inline'"],
+      imgSrc:      ["'self'", "data:", "blob:"],
+      connectSrc:  ["'self'", ...(process.env.SUPABASE_URL ? [process.env.SUPABASE_URL] : [])],
+      fontSrc:     ["'self'"],
+      objectSrc:   ["'none'"],
+      frameAncestors: ["'none'"],
+      baseUri:     ["'self'"],
+      formAction:  ["'self'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false, // would break the Supabase CDN script
+}));
+app.use('/api/', readLimiter);
 app.use(express.json());
 app.use(express.static('public'));
 app.use('/images', express.static(IMAGES_DIR));
@@ -597,8 +705,8 @@ app.post('/api/preview', async (req, res) => {
     // Process wikilinks in the content
     const processedContent = await processWikilinks(content, currentPage || 'home');
 
-    // Convert to HTML
-    const html = marked.parse(processedContent);
+    // Convert to HTML and sanitize to prevent XSS
+    const html = sanitize(marked.parse(processedContent));
 
     res.json({ html });
   } catch (error) {
@@ -678,9 +786,9 @@ app.get('/api/page/*', async (req, res) => {
     const processedMain = await processWikilinks(mainContent, pagePath);
     const processedFooter = footerContent ? await processWikilinks(footerContent, pagePath) : '';
 
-    // Convert to HTML
-    const html = marked.parse(processedMain);
-    const footerHtml = processedFooter ? marked.parse(processedFooter) : '';
+    // Convert to HTML and sanitize to prevent XSS
+    const html = sanitize(marked.parse(processedMain));
+    const footerHtml = processedFooter ? sanitize(marked.parse(processedFooter)) : '';
 
     res.json({
       path: pagePath,
@@ -693,6 +801,12 @@ app.get('/api/page/*', async (req, res) => {
     res.status(500).json({ error: 'Failed to read page' });
   }
 });
+
+// Tighter rate limit on all mutating endpoints
+app.use([
+  '/api/page', '/api/create', '/api/rename', '/api/special',
+  '/api/config', '/api/upload-image', '/api/logo', '/api/git',
+], writeLimiter);
 
 // API: Save page
 app.post('/api/page/*', requireAuth, async (req, res) => {
@@ -1252,11 +1366,16 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Start server
-(async () => {
-  await initializeWiki();
-  await buildPageIndex();
-  app.listen(PORT, () => {
-    console.log(`Massive Wiki running on http://localhost:${PORT}`);
-  });
-})();
+// Start server only when run directly (not when imported by tests)
+if (require.main === module) {
+  (async () => {
+    await initializeWiki();
+    await buildPageIndex();
+    app.listen(PORT, () => {
+      console.log(`Massive Wiki running on http://localhost:${PORT}`);
+    });
+  })();
+}
+
+// Export for unit testing
+module.exports = { sanitize, imageFilter };
