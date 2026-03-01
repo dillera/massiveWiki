@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Massive Wiki — Initial Setup</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: var(--bg-color, #f5f5f5);
+            margin: 0;
+        }
+        .setup-card {
+            background: var(--surface-color, #fff);
+            border: 1px solid var(--border-color, #ddd);
+            border-radius: 8px;
+            padding: 2rem;
+            width: 100%;
+            max-width: 440px;
+            box-shadow: 0 4px 16px rgba(0,0,0,.08);
+        }
+        .setup-card h1 {
+            margin: 0 0 .25rem;
+            font-size: 1.4rem;
+        }
+        .setup-card .subtitle {
+            color: var(--text-muted, #666);
+            margin: 0 0 1.5rem;
+            font-size: .9rem;
+        }
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: .3rem;
+            font-size: .9rem;
+        }
+        .form-group input {
+            width: 100%;
+            padding: .5rem .75rem;
+            border: 1px solid var(--border-color, #ccc);
+            border-radius: 4px;
+            font-size: .95rem;
+            box-sizing: border-box;
+            background: var(--input-bg, #fff);
+            color: var(--text-color, #333);
+        }
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--accent-color, #7c3aed);
+            box-shadow: 0 0 0 2px rgba(124,58,237,.15);
+        }
+        .hint {
+            font-size: .78rem;
+            color: var(--text-muted, #888);
+            margin-top: .25rem;
+        }
+        .btn-primary {
+            width: 100%;
+            padding: .65rem;
+            background: var(--accent-color, #7c3aed);
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: .5rem;
+        }
+        .btn-primary:hover { opacity: .9; }
+        .btn-primary:disabled { opacity: .6; cursor: not-allowed; }
+        .error-msg {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #b91c1c;
+            padding: .6rem .85rem;
+            border-radius: 4px;
+            font-size: .88rem;
+            margin-bottom: 1rem;
+            display: none;
+        }
+        .success-msg {
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            color: #15803d;
+            padding: .6rem .85rem;
+            border-radius: 4px;
+            font-size: .88rem;
+            margin-bottom: 1rem;
+            display: none;
+        }
+        .password-strength {
+            height: 4px;
+            border-radius: 2px;
+            margin-top: .4rem;
+            background: #e5e7eb;
+            overflow: hidden;
+        }
+        .password-strength-bar {
+            height: 100%;
+            border-radius: 2px;
+            transition: width .2s, background .2s;
+            width: 0;
+        }
+        .divider {
+            border: none;
+            border-top: 1px solid var(--border-color, #eee);
+            margin: 1.5rem 0;
+        }
+        .info-box {
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            border-radius: 4px;
+            padding: .75rem .9rem;
+            font-size: .85rem;
+            color: #1e40af;
+        }
+        .info-box strong { display: block; margin-bottom: .2rem; }
+    </style>
+</head>
+<body>
+    <div class="setup-card">
+        <h1>Massive Wiki Setup</h1>
+        <p class="subtitle">Create your administrator account to get started.</p>
+
+        <div class="info-box">
+            <strong>This account is your admin failsafe.</strong>
+            It lets you log in and configure authentication even before any external providers are set up.
+        </div>
+
+        <hr class="divider">
+
+        <div id="errorMsg" class="error-msg" role="alert"></div>
+        <div id="successMsg" class="success-msg" role="status"></div>
+
+        <form id="setupForm" novalidate>
+            <div class="form-group">
+                <label for="username">Admin Username</label>
+                <input type="text" id="username" name="username"
+                       autocomplete="username" required
+                       minlength="3" maxlength="32"
+                       placeholder="admin">
+                <p class="hint">3–32 characters. Letters, numbers, hyphens, underscores.</p>
+            </div>
+
+            <div class="form-group">
+                <label for="email">Email Address</label>
+                <input type="email" id="email" name="email"
+                       autocomplete="email" required
+                       placeholder="you@example.com">
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password"
+                       autocomplete="new-password" required
+                       minlength="12"
+                       placeholder="At least 12 characters">
+                <div class="password-strength">
+                    <div class="password-strength-bar" id="strengthBar"></div>
+                </div>
+                <p class="hint" id="strengthHint">Minimum 12 characters.</p>
+            </div>
+
+            <div class="form-group">
+                <label for="confirmPassword">Confirm Password</label>
+                <input type="password" id="confirmPassword" name="confirmPassword"
+                       autocomplete="new-password" required
+                       placeholder="Repeat your password">
+            </div>
+
+            <button type="submit" class="btn-primary" id="submitBtn">Create Admin Account</button>
+        </form>
+    </div>
+
+    <script>
+        const form = document.getElementById('setupForm');
+        const errorMsg = document.getElementById('errorMsg');
+        const successMsg = document.getElementById('successMsg');
+        const submitBtn = document.getElementById('submitBtn');
+        const passwordInput = document.getElementById('password');
+        const strengthBar = document.getElementById('strengthBar');
+        const strengthHint = document.getElementById('strengthHint');
+
+        function showError(msg) {
+            errorMsg.textContent = msg;
+            errorMsg.style.display = 'block';
+            successMsg.style.display = 'none';
+        }
+
+        function showSuccess(msg) {
+            successMsg.textContent = msg;
+            successMsg.style.display = 'block';
+            errorMsg.style.display = 'none';
+        }
+
+        function scorePassword(pw) {
+            let score = 0;
+            if (pw.length >= 12) score++;
+            if (pw.length >= 16) score++;
+            if (/[A-Z]/.test(pw)) score++;
+            if (/[0-9]/.test(pw)) score++;
+            if (/[^A-Za-z0-9]/.test(pw)) score++;
+            return score;
+        }
+
+        passwordInput.addEventListener('input', () => {
+            const pw = passwordInput.value;
+            const score = scorePassword(pw);
+            const pct = Math.min(100, score * 20);
+            const colors = ['#ef4444','#f97316','#eab308','#22c55e','#16a34a'];
+            const labels = ['Too short','Weak','Fair','Good','Strong'];
+            strengthBar.style.width = pct + '%';
+            strengthBar.style.background = colors[Math.min(score, 4)];
+            if (pw.length === 0) {
+                strengthHint.textContent = 'Minimum 12 characters.';
+            } else if (pw.length < 12) {
+                strengthHint.textContent = `${12 - pw.length} more character(s) needed.`;
+            } else {
+                strengthHint.textContent = labels[Math.min(score, 4)];
+            }
+        });
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            errorMsg.style.display = 'none';
+
+            const username = document.getElementById('username').value.trim();
+            const email = document.getElementById('email').value.trim();
+            const password = passwordInput.value;
+            const confirm = document.getElementById('confirmPassword').value;
+
+            if (!username || !email || !password || !confirm) {
+                return showError('All fields are required.');
+            }
+            if (!/^[a-zA-Z0-9_-]{3,32}$/.test(username)) {
+                return showError('Username must be 3–32 characters (letters, numbers, hyphens, underscores).');
+            }
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                return showError('Please enter a valid email address.');
+            }
+            if (password.length < 12) {
+                return showError('Password must be at least 12 characters.');
+            }
+            if (password !== confirm) {
+                return showError('Passwords do not match.');
+            }
+
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Creating account…';
+
+            try {
+                const resp = await fetch('/api/setup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, email, password }),
+                });
+                const data = await resp.json();
+
+                if (!resp.ok) {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Create Admin Account';
+                    return showError(data.error || 'Setup failed. Please try again.');
+                }
+
+                showSuccess('Admin account created! Redirecting to login…');
+                setTimeout(() => { window.location.href = '/admin-login'; }, 1200);
+            } catch (err) {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Create Admin Account';
+                showError('Network error. Please check the server and try again.');
+            }
+        });
+    </script>
+</body>
+</html>

@@ -374,8 +374,8 @@ Edit configuration via Admin Panel or directly edit `_wiki/_config.json`.
 
 ### Port
 
-- Default port: `3000`
-- Access at: `http://localhost:3000`
+- Default port: `3200`
+- Access at: `http://localhost:3200`
 
 ### Starting the Server
 

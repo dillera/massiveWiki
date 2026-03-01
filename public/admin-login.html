@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Massive Wiki — Admin Login</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: var(--bg-color, #f5f5f5);
+            margin: 0;
+        }
+        .login-card {
+            background: var(--surface-color, #fff);
+            border: 1px solid var(--border-color, #ddd);
+            border-radius: 8px;
+            padding: 2rem;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 4px 16px rgba(0,0,0,.08);
+        }
+        .login-card h1 {
+            margin: 0 0 .25rem;
+            font-size: 1.4rem;
+        }
+        .login-card .subtitle {
+            color: var(--text-muted, #666);
+            margin: 0 0 1.5rem;
+            font-size: .9rem;
+        }
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: .3rem;
+            font-size: .9rem;
+        }
+        .form-group input {
+            width: 100%;
+            padding: .5rem .75rem;
+            border: 1px solid var(--border-color, #ccc);
+            border-radius: 4px;
+            font-size: .95rem;
+            box-sizing: border-box;
+            background: var(--input-bg, #fff);
+            color: var(--text-color, #333);
+        }
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--accent-color, #7c3aed);
+            box-shadow: 0 0 0 2px rgba(124,58,237,.15);
+        }
+        .btn-primary {
+            width: 100%;
+            padding: .65rem;
+            background: var(--accent-color, #7c3aed);
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: .5rem;
+        }
+        .btn-primary:hover { opacity: .9; }
+        .btn-primary:disabled { opacity: .6; cursor: not-allowed; }
+        .error-msg {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #b91c1c;
+            padding: .6rem .85rem;
+            border-radius: 4px;
+            font-size: .88rem;
+            margin-bottom: 1rem;
+            display: none;
+        }
+        .divider {
+            border: none;
+            border-top: 1px solid var(--border-color, #eee);
+            margin: 1.5rem 0;
+        }
+        .alt-link {
+            text-align: center;
+            font-size: .85rem;
+            color: var(--text-muted, #666);
+        }
+        .alt-link a {
+            color: var(--accent-color, #7c3aed);
+            text-decoration: none;
+        }
+        .alt-link a:hover { text-decoration: underline; }
+        .lock-icon {
+            font-size: 2rem;
+            text-align: center;
+            margin-bottom: .75rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <div class="lock-icon">🔐</div>
+        <h1 style="text-align:center;">Admin Login</h1>
+        <p class="subtitle" style="text-align:center;">Sign in with your administrator credentials.</p>
+
+        <div id="errorMsg" class="error-msg" role="alert"></div>
+
+        <form id="loginForm" novalidate>
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username"
+                       autocomplete="username" required
+                       placeholder="admin">
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password"
+                       autocomplete="current-password" required
+                       placeholder="Your password">
+            </div>
+
+            <button type="submit" class="btn-primary" id="submitBtn">Sign In</button>
+        </form>
+
+        <hr class="divider">
+
+        <p class="alt-link">
+            Forgot this password? Restore access by replacing
+            <code>wiki-data/_wiki/_admin.json</code> and restarting.
+        </p>
+
+        <p class="alt-link" style="margin-top:.75rem;">
+            <a href="/">Back to wiki</a>
+        </p>
+    </div>
+
+    <script>
+        const form = document.getElementById('loginForm');
+        const errorMsg = document.getElementById('errorMsg');
+        const submitBtn = document.getElementById('submitBtn');
+
+        function showError(msg) {
+            errorMsg.textContent = msg;
+            errorMsg.style.display = 'block';
+        }
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            errorMsg.style.display = 'none';
+
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+
+            if (!username || !password) {
+                return showError('Please enter your username and password.');
+            }
+
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Signing in…';
+
+            try {
+                const resp = await fetch('/api/admin-login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password }),
+                });
+                const data = await resp.json();
+
+                if (!resp.ok) {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Sign In';
+                    // Intentionally vague message to avoid enumeration
+                    return showError('Invalid username or password.');
+                }
+
+                // Success — go to the wiki
+                window.location.href = '/';
+            } catch (err) {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Sign In';
+                showError('Network error. Please check the server and try again.');
+            }
+        });
+
+        // Auto-focus username field
+        document.getElementById('username').focus();
+    </script>
+</body>
+</html>

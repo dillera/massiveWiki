@@ -12,16 +12,18 @@ const { createClient } = require('@supabase/supabase-js');
 const sanitizeHtml = require('sanitize-html');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const bcrypt = require('bcryptjs');
+const session = require('express-session');
+const crypto = require('crypto');
 
 const execFilePromise = util.promisify(execFile);
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3200;
 
-// Initialize Supabase client
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY
-);
+// Initialize Supabase client (null when credentials are not yet configured)
+let supabase = (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY)
+  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+  : null;
 
 // ---------------------------------------------------------------------------
 // XSS: sanitize HTML produced by marked before sending to clients.
@@ -104,23 +106,36 @@ const writeLimiter = rateLimit({
   message: { error: 'Too many requests, please try again later.' },
 });
 
+// Strict rate limiter for the one-time setup endpoint (5 attempts per hour)
+const setupLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many setup attempts, please try again later.' },
+});
+
+// Rate limiter for the local admin login (10 attempts per 15 minutes)
+const adminLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many login attempts, please try again later.' },
+});
+
 // Middleware to verify JWT token from Supabase
 async function verifyAuth(req) {
-  const authHeader = req.headers.authorization;
+  if (!supabase) return null; // Supabase not yet configured
 
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return null;
-  }
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
 
   const token = authHeader.substring(7);
 
   try {
     const { data: { user }, error } = await supabase.auth.getUser(token);
-
-    if (error || !user) {
-      return null;
-    }
-
+    if (error || !user) return null;
     return user;
   } catch (error) {
     console.error('Error verifying token:', error);
@@ -128,8 +143,14 @@ async function verifyAuth(req) {
   }
 }
 
-// Middleware: require a valid Supabase session for mutating endpoints
+// Middleware: require a valid Supabase session OR local admin session for mutating endpoints
 async function requireAuth(req, res, next) {
+  // Local admin session (permanent failsafe — works even without Supabase configured)
+  if (req.session && req.session.adminLoggedIn) {
+    req.user = { email: req.session.adminUser.email, isLocalAdmin: true };
+    return next();
+  }
+  // Supabase JWT
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
     return res.status(503).json({ error: 'Authentication not configured on this server.' });
   }
@@ -169,6 +190,12 @@ const WIKI_HOME = parseArgs();
 const PAGES_DIR = path.join(WIKI_HOME, 'pages');
 const IMAGES_DIR = path.join(WIKI_HOME, 'images');
 const WIKI_DIR = path.join(WIKI_HOME, '_wiki');
+const ADMIN_FILE = path.join(WIKI_HOME, '_wiki', '_admin.json');
+
+// Returns true once the admin account has been created via /setup
+function isAdminConfigured() {
+  return fsSync.existsSync(ADMIN_FILE);
+}
 
 // Initialize wiki directory structure
 async function initializeWiki() {
@@ -385,10 +412,10 @@ app.use(helmet({
       defaultSrc:  ["'self'"],
       // 'unsafe-inline' is required by the openPreview() document.write() feature
       scriptSrc:   ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
-      styleSrc:    ["'self'", "'unsafe-inline'"],
+      styleSrc:    ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      fontSrc:     ["'self'", "https://fonts.gstatic.com"],
       imgSrc:      ["'self'", "data:", "blob:"],
       connectSrc:  ["'self'", ...(process.env.SUPABASE_URL ? [process.env.SUPABASE_URL] : [])],
-      fontSrc:     ["'self'"],
       objectSrc:   ["'none'"],
       frameAncestors: ["'none'"],
       baseUri:     ["'self'"],
@@ -399,6 +426,41 @@ app.use(helmet({
 }));
 app.use('/api/', readLimiter);
 app.use(express.json());
+
+// ---------------------------------------------------------------------------
+// Session middleware — used for the local admin failsafe account.
+// In production, set SESSION_SECRET in .env so sessions survive restarts.
+// Must run before the setup guard and before static files.
+// ---------------------------------------------------------------------------
+app.use(session({
+  secret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex'),
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    maxAge: 8 * 60 * 60 * 1000, // 8 hours
+  },
+}));
+
+// ---------------------------------------------------------------------------
+// Setup-mode guard: redirect all requests to /setup until the admin account
+// has been created. Must run BEFORE express.static so that visiting / does
+// not serve index.html before the guard has a chance to redirect.
+// Static assets (css/js/images) and the setup routes are exempt.
+// ---------------------------------------------------------------------------
+app.use((req, res, next) => {
+  if (isAdminConfigured()) return next();
+  const exempt = ['/setup', '/api/setup', '/css/', '/js/', '/images/', '/favicon'];
+  if (exempt.some(p => req.path.startsWith(p))) return next();
+  // API calls get a JSON error instead of a redirect
+  if (req.path.startsWith('/api/')) {
+    return res.status(503).json({ error: 'Server not yet configured. Complete setup at /setup.' });
+  }
+  res.redirect('/setup');
+});
+
 app.use(express.static('public'));
 app.use('/images', express.static(IMAGES_DIR));
 
@@ -742,7 +804,9 @@ app.get('/api/page/*', async (req, res) => {
 
       // If auth is enabled and page is protected
       if (config.authEnabled && config.protectedPages && config.protectedPages.includes(pagePath)) {
-        const user = await verifyAuth(req);
+        // Accept local admin session as well as Supabase JWT
+        const localAdmin = req.session && req.session.adminLoggedIn;
+        const user = localAdmin ? req.session.adminUser : await verifyAuth(req);
 
         if (!user) {
           return res.status(401).json({
@@ -1181,11 +1245,63 @@ app.get('/api/auth/config', async (req, res) => {
       authEnabled,
       supabaseUrl: process.env.SUPABASE_URL || null,
       supabaseAnonKey: process.env.SUPABASE_ANON_KEY || null,
-      hasSupabaseConfig: !!(process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY)
+      hasSupabaseConfig: !!(process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY),
+      localAdminConfigured: isAdminConfigured(),
+      localAdminLoggedIn: !!(req.session && req.session.adminLoggedIn),
     });
   } catch (error) {
     console.error('Error loading auth config:', error);
     res.status(500).json({ error: 'Failed to load auth config' });
+  }
+});
+
+// API: Save Supabase credentials — writes to .env and hot-reloads the client
+app.post('/api/auth/supabase-config', requireAuth, async (req, res) => {
+  const { supabaseUrl, supabaseAnonKey } = req.body || {};
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return res.status(400).json({ error: 'supabaseUrl and supabaseAnonKey are required.' });
+  }
+
+  const url = supabaseUrl.trim();
+  const key = supabaseAnonKey.trim();
+
+  if (!/^https:\/\/[a-zA-Z0-9-]+\.supabase\.co$/.test(url)) {
+    return res.status(400).json({ error: 'Invalid Supabase URL. Expected format: https://your-project.supabase.co' });
+  }
+  if (!key.startsWith('eyJ')) {
+    return res.status(400).json({ error: 'Invalid anon key format. Paste the full key from your Supabase project settings.' });
+  }
+
+  try {
+    const envPath = path.join(__dirname, '.env');
+    let envContent = '';
+    try { envContent = fsSync.readFileSync(envPath, 'utf8'); } catch { /* file may not exist yet */ }
+
+    // Update existing lines or append
+    if (/^SUPABASE_URL=/m.test(envContent)) {
+      envContent = envContent.replace(/^SUPABASE_URL=.*/m, `SUPABASE_URL=${url}`);
+    } else {
+      envContent += `\nSUPABASE_URL=${url}`;
+    }
+    if (/^SUPABASE_ANON_KEY=/m.test(envContent)) {
+      envContent = envContent.replace(/^SUPABASE_ANON_KEY=.*/m, `SUPABASE_ANON_KEY=${key}`);
+    } else {
+      envContent += `\nSUPABASE_ANON_KEY=${key}`;
+    }
+
+    fsSync.writeFileSync(envPath, envContent, { mode: 0o600 });
+
+    // Hot-reload: update process.env and recreate the client — no restart needed
+    process.env.SUPABASE_URL = url;
+    process.env.SUPABASE_ANON_KEY = key;
+    supabase = createClient(url, key);
+
+    console.log('Supabase configuration updated and client reloaded.');
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error saving Supabase config:', err);
+    res.status(500).json({ error: 'Failed to save Supabase configuration.' });
   }
 });
 
@@ -1361,7 +1477,107 @@ app.get('/api/git/status', requireAuth, async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Initial setup routes
+// ---------------------------------------------------------------------------
+
+// Serve setup page (only before admin is created)
+app.get('/setup', (req, res) => {
+  if (isAdminConfigured()) return res.redirect('/');
+  res.sendFile(path.join(__dirname, 'public', 'setup.html'));
+});
+
+// Create the admin account (one-time, rate-limited)
+app.post('/api/setup', setupLimiter, async (req, res) => {
+  if (isAdminConfigured()) {
+    return res.status(409).json({ error: 'Admin account already configured.' });
+  }
+
+  const { username, email, password } = req.body || {};
+
+  if (!username || !email || !password) {
+    return res.status(400).json({ error: 'username, email, and password are all required.' });
+  }
+
+  // Validate username: letters, numbers, hyphens, underscores only
+  if (!/^[a-zA-Z0-9_-]{3,32}$/.test(username)) {
+    return res.status(400).json({ error: 'Username must be 3–32 characters (letters, numbers, hyphens, underscores).' });
+  }
+
+  // Basic email format check
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: 'Invalid email address.' });
+  }
+
+  if (password.length < 12) {
+    return res.status(400).json({ error: 'Password must be at least 12 characters.' });
+  }
+
+  try {
+    const passwordHash = await bcrypt.hash(password, 12);
+    const adminData = {
+      username,
+      email,
+      passwordHash,
+      createdAt: new Date().toISOString(),
+    };
+    // mode 0o600 = owner read/write only
+    fsSync.writeFileSync(ADMIN_FILE, JSON.stringify(adminData, null, 2), { mode: 0o600 });
+    console.log(`Admin account created for: ${email}`);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error creating admin account:', err);
+    res.status(500).json({ error: 'Failed to create admin account.' });
+  }
+});
+
+// Serve admin login page
+app.get('/admin-login', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin-login.html'));
+});
+
+// Authenticate with local admin credentials (rate-limited)
+app.post('/api/admin-login', adminLoginLimiter, async (req, res) => {
+  if (!isAdminConfigured()) {
+    return res.status(503).json({ error: 'Admin account not configured. Complete /setup first.' });
+  }
+
+  const { username, password } = req.body || {};
+
+  if (!username || !password) {
+    return res.status(400).json({ error: 'username and password are required.' });
+  }
+
+  try {
+    const adminData = JSON.parse(fsSync.readFileSync(ADMIN_FILE, 'utf8'));
+    const usernameMatch = username === adminData.username;
+    // Always run bcrypt.compare to prevent timing-based username enumeration
+    const passwordMatch = await bcrypt.compare(password, adminData.passwordHash);
+
+    if (!usernameMatch || !passwordMatch) {
+      return res.status(401).json({ error: 'Invalid username or password.' });
+    }
+
+    req.session.adminLoggedIn = true;
+    req.session.adminUser = { username: adminData.username, email: adminData.email };
+    console.log(`Local admin logged in: ${adminData.email}`);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error during admin login:', err);
+    res.status(500).json({ error: 'Login failed.' });
+  }
+});
+
+// Destroy local admin session
+app.post('/api/admin-logout', (req, res) => {
+  req.session.destroy(() => {
+    res.json({ success: true });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Serve main app
+// ---------------------------------------------------------------------------
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });

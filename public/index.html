@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Massive Wiki</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,700;1,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
@@ -132,35 +135,52 @@
                                 <p class="help-text">When enabled, certain pages and features will require login</p>
                             </div>
 
+                            <!-- Supabase config form — shown when not yet configured -->
                             <div id="authSetupInstructions" style="display: none;">
                                 <div class="info-box">
-                                    <h4>📝 Setup Instructions</h4>
-                                    <ol>
-                                        <li>Create a free account at <a href="https://supabase.com" target="_blank">supabase.com</a></li>
-                                        <li>Create a new project</li>
-                                        <li>Go to Project Settings > API</li>
-                                        <li>Copy your Project URL and anon/public key</li>
-                                        <li>Add them to your <code>.env</code> file:
-                                            <pre>SUPABASE_URL=your-project-url
-SUPABASE_ANON_KEY=your-anon-key</pre>
-                                        </li>
-                                        <li>Restart the server</li>
-                                        <li>Enable authentication using the toggle above</li>
-                                    </ol>
+                                    <h4>🔧 Connect Supabase</h4>
+                                    <p class="help-text">Find these values in your Supabase project under <strong>Settings → API</strong>. Don't have a project? <a href="https://supabase.com" target="_blank">Create one free at supabase.com</a>.</p>
+                                    <div class="control-group" style="margin-top: 0.75rem;">
+                                        <label for="supabaseUrlInput">Project URL</label>
+                                        <input type="url" id="supabaseUrlInput" class="text-input" placeholder="https://your-project.supabase.co">
+                                    </div>
+                                    <div class="control-group">
+                                        <label for="supabaseAnonKeyInput">Anon / Public Key</label>
+                                        <input type="text" id="supabaseAnonKeyInput" class="text-input" placeholder="eyJ…">
+                                        <p class="help-text">Use the <em>anon</em> key, not the service_role key.</p>
+                                    </div>
+                                    <button id="saveSupabaseConfigBtn" class="btn btn-primary">Save &amp; Activate</button>
                                 </div>
                             </div>
 
+                            <!-- Shown when Supabase is already configured -->
                             <div id="authManagementLinks" style="display: none;">
                                 <div class="info-box">
                                     <h4>🔐 User Management</h4>
                                     <p>Manage users and authentication in your Supabase dashboard:</p>
                                     <ul>
-                                        <li><a href="https://supabase.com/dashboard/project/vqxkmogkyazcllrddpym/auth/users" target="_blank">Manage Users</a></li>
-                                        <li><a href="https://supabase.com/dashboard/project/vqxkmogkyazcllrddpym/auth/policies" target="_blank">Security Policies</a></li>
-                                        <li><a href="https://supabase.com/dashboard/project/vqxkmogkyazcllrddpym/settings/auth" target="_blank">Auth Settings</a></li>
+                                        <li><a id="supabaseUsersLink" href="#" target="_blank">Manage Users</a></li>
+                                        <li><a id="supabasePoliciesLink" href="#" target="_blank">Security Policies</a></li>
+                                        <li><a id="supabaseAuthSettingsLink" href="#" target="_blank">Auth Settings</a></li>
                                     </ul>
-                                    <p class="help-text"><strong>Protected Pages:</strong> secret</p>
                                 </div>
+
+                                <!-- Update credentials (collapsed by default) -->
+                                <details style="margin-top: 0.75rem;">
+                                    <summary class="help-text" style="cursor: pointer;">Update Supabase credentials</summary>
+                                    <div class="info-box" style="margin-top: 0.5rem;">
+                                        <div class="control-group">
+                                            <label for="supabaseUrlInputEdit">Project URL</label>
+                                            <input type="url" id="supabaseUrlInputEdit" class="text-input" placeholder="https://your-project.supabase.co">
+                                        </div>
+                                        <div class="control-group">
+                                            <label for="supabaseAnonKeyInputEdit">Anon / Public Key</label>
+                                            <input type="text" id="supabaseAnonKeyInputEdit" class="text-input" placeholder="Paste new key to replace current">
+                                            <p class="help-text">Leave blank to keep the existing key.</p>
+                                        </div>
+                                        <button id="updateSupabaseConfigBtn" class="btn btn-primary">Update Credentials</button>
+                                    </div>
+                                </details>
                             </div>
 
                             <button id="saveAuthConfigBtn" class="btn btn-primary">Save Auth Settings</button>

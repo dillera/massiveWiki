@@ -83,6 +83,8 @@ function setupEventListeners() {
 
     // Auth configuration
     document.getElementById('saveAuthConfigBtn').addEventListener('click', saveAuthConfig);
+    document.getElementById('saveSupabaseConfigBtn').addEventListener('click', () => saveSupabaseConfig('new'));
+    document.getElementById('updateSupabaseConfigBtn').addEventListener('click', () => saveSupabaseConfig('update'));
 
     // Appearance controls
     document.getElementById('applyAppearanceBtn').addEventListener('click', applyAppearance);
@@ -1031,28 +1033,97 @@ async function loadAuthStatus() {
         const setupInstructions = document.getElementById('authSetupInstructions');
         const managementLinks = document.getElementById('authManagementLinks');
 
-        // Set toggle state
         toggle.checked = authConfig.authEnabled;
 
-        // Update status display
         if (authConfig.hasSupabaseConfig) {
             supabaseStatus.innerHTML = '<strong>Supabase:</strong> <span style="color: green;">✓ Configured</span>';
             setupInstructions.style.display = 'none';
             managementLinks.style.display = 'block';
+
+            // Pre-fill the update form with the current URL (key intentionally left blank)
+            document.getElementById('supabaseUrlInputEdit').value = authConfig.supabaseUrl || '';
+
+            // Build project-specific dashboard links from the URL
+            const projectRef = (authConfig.supabaseUrl || '').replace('https://', '').split('.')[0];
+            const base = `https://supabase.com/dashboard/project/${projectRef}`;
+            document.getElementById('supabaseUsersLink').href = `${base}/auth/users`;
+            document.getElementById('supabasePoliciesLink').href = `${base}/auth/policies`;
+            document.getElementById('supabaseAuthSettingsLink').href = `${base}/settings/auth`;
         } else {
-            supabaseStatus.innerHTML = '<strong>Supabase:</strong> <span style="color: orange;">⚠ Not Configured</span>';
+            supabaseStatus.innerHTML = '<strong>Supabase:</strong> <span style="color: orange;">⚠ Not configured</span>';
             setupInstructions.style.display = 'block';
             managementLinks.style.display = 'none';
         }
 
-        if (authConfig.authEnabled) {
-            statusText.innerHTML = '<span style="color: green;">Enabled</span>';
-        } else {
-            statusText.innerHTML = '<span style="color: gray;">Disabled</span>';
-        }
+        statusText.innerHTML = authConfig.authEnabled
+            ? '<span style="color: green;">Enabled</span>'
+            : '<span style="color: gray;">Disabled</span>';
 
     } catch (error) {
         console.error('Error loading auth status:', error);
+    }
+}
+
+async function saveSupabaseConfig(mode) {
+    const urlInput = mode === 'update'
+        ? document.getElementById('supabaseUrlInputEdit')
+        : document.getElementById('supabaseUrlInput');
+    const keyInput = mode === 'update'
+        ? document.getElementById('supabaseAnonKeyInputEdit')
+        : document.getElementById('supabaseAnonKeyInput');
+    const btn = mode === 'update'
+        ? document.getElementById('updateSupabaseConfigBtn')
+        : document.getElementById('saveSupabaseConfigBtn');
+
+    const supabaseUrl = urlInput.value.trim();
+    const supabaseAnonKey = keyInput.value.trim();
+
+    if (!supabaseUrl) {
+        showNotification('Project URL is required.', 'error');
+        return;
+    }
+    if (!supabaseAnonKey && mode === 'new') {
+        showNotification('Anon key is required.', 'error');
+        return;
+    }
+
+    // When updating, allow leaving the key blank to keep the existing one.
+    // In that case, fetch the current key from the server config.
+    let finalKey = supabaseAnonKey;
+    if (mode === 'update' && !supabaseAnonKey) {
+        const cfg = await fetch('/api/auth/config').then(r => r.json());
+        finalKey = cfg.supabaseAnonKey || '';
+        if (!finalKey) {
+            showNotification('No existing key found — please enter the anon key.', 'error');
+            return;
+        }
+    }
+
+    btn.disabled = true;
+    const origText = btn.textContent;
+    btn.textContent = 'Saving…';
+
+    try {
+        const resp = await authFetch('/api/auth/supabase-config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ supabaseUrl, supabaseAnonKey: finalKey }),
+        });
+        const data = await resp.json();
+
+        if (!resp.ok) {
+            showNotification(data.error || 'Failed to save Supabase config.', 'error');
+            return;
+        }
+
+        showNotification('Supabase configured! Reloading…', 'success');
+        setTimeout(() => window.location.reload(), 1200);
+    } catch (err) {
+        console.error('Error saving Supabase config:', err);
+        showNotification('Network error saving Supabase config.', 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = origText;
     }
 }
 

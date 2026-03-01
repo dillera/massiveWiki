@@ -53,7 +53,7 @@ node server.js --home /path/to/your/wiki
 5. Open your browser to:
 
 ```
-http://localhost:3000
+http://localhost:3200
 ```
 
 ### First Run Initialization
@@ -70,7 +70,7 @@ First run detected - initializing wiki structure...
 ✓ Created _config.json
 ✓ Wiki initialization complete!
 Page index built: 2 entries
-Massive Wiki running on http://localhost:3000
+Massive Wiki running on http://localhost:3200
 ```
 
 ## Project Structure
@@ -231,7 +231,7 @@ The server exposes these REST API endpoints:
 Change the port by editing `server.js`:
 
 ```javascript
-const PORT = 3000; // Change this to your preferred port
+const PORT = 3200; // Change this to your preferred port
 ```
 
 ### Styling
@@ -274,7 +274,7 @@ npm run dev
 ## Troubleshooting
 
 ### Server won't start
-- Check if port 3000 is already in use
+- Check if port 3200 is already in use
 - Ensure Node.js is installed: `node --version`
 - Delete `node_modules` and run `npm install` again
 
