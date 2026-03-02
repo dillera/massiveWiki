@@ -459,6 +459,16 @@ app.use(helmet({
 app.use('/api/', readLimiter);
 app.use(express.json());
 
+// Request logger — logs every API call and its response status.
+// Remove or disable once the auth issue is diagnosed.
+app.use('/api/', (req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    console.log(`[API] ${req.method} ${req.path} → ${res.statusCode} (${Date.now() - start}ms) | session=${req.sessionID?.slice(0,8) || 'none'} adminLoggedIn=${req.session?.adminLoggedIn || false}`);
+  });
+  next();
+});
+
 // ---------------------------------------------------------------------------
 // Session middleware — used for the local admin failsafe account.
 // Auto-generates SESSION_SECRET and saves it to .env if not already set,
