@@ -150,6 +150,9 @@ async function requireAuth(req, res, next) {
     req.user = { email: req.session.adminUser.email, isLocalAdmin: true };
     return next();
   }
+  // Log why the session check failed to aid debugging
+  console.warn(`[requireAuth] ${req.method} ${req.path} — session check failed. ` +
+    `sessionID=${req.sessionID || 'none'} adminLoggedIn=${req.session?.adminLoggedIn}`);
   // Supabase JWT
   if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
     return res.status(503).json({ error: 'Authentication not configured on this server.' });
@@ -1609,8 +1612,16 @@ app.post('/api/admin-login', adminLoginLimiter, async (req, res) => {
 
     req.session.adminLoggedIn = true;
     req.session.adminUser = { username: adminData.username, email: adminData.email };
-    console.log(`Local admin logged in: ${adminData.email}`);
-    res.json({ success: true });
+    // Explicitly save before responding so the session is in the store
+    // before the browser makes its next request.
+    req.session.save((saveErr) => {
+      if (saveErr) {
+        console.error('Session save error during admin login:', saveErr);
+        return res.status(500).json({ error: 'Login failed (session error).' });
+      }
+      console.log(`Local admin logged in: ${adminData.email}`);
+      res.json({ success: true });
+    });
   } catch (err) {
     console.error('Error during admin login:', err);
     res.status(500).json({ error: 'Login failed.' });

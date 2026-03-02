@@ -471,7 +471,10 @@ async function savePage() {
             body: JSON.stringify({ content: raw })
         });
 
-        if (!response.ok) throw new Error('Failed to save');
+        if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            throw new Error(data.error || `Server error (${response.status})`);
+        }
 
         showNotification('Page saved successfully', 'success');
         exitEditMode();
@@ -983,7 +986,10 @@ async function saveSpecialPage() {
             body: JSON.stringify({ content })
         });
 
-        if (!response.ok) throw new Error('Failed to save');
+        if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            throw new Error(data.error || `Server error (${response.status})`);
+        }
 
         showNotification('Special page saved successfully', 'success');
         closeModal('specialPageModal');
@@ -995,7 +1001,7 @@ async function saveSpecialPage() {
             await loadGlobalFooter();
         }
     } catch (error) {
-        showNotification('Error saving special page', 'error');
+        showNotification(`Error saving special page: ${error.message}`, 'error');
         console.error(error);
     }
 }
@@ -1027,7 +1033,10 @@ async function saveConfig() {
             body: JSON.stringify(config)
         });
 
-        if (!response.ok) throw new Error('Failed to save');
+        if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            throw new Error(data.error || `Server error (${response.status})`);
+        }
 
         showNotification('Configuration saved successfully', 'success');
         closeModal('configModal');
@@ -1148,7 +1157,10 @@ async function saveAuthConfig() {
             body: JSON.stringify(config)
         });
 
-        if (!saveResponse.ok) throw new Error('Failed to save config');
+        if (!saveResponse.ok) {
+            const data = await saveResponse.json().catch(() => ({}));
+            throw new Error(data.error || `Server error (${saveResponse.status})`);
+        }
 
         showNotification('Authentication settings saved. Please reload the page.', 'success');
 
