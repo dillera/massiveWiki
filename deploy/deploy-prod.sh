@@ -127,12 +127,33 @@ else
 fi
 ok ".env updated — PORT=$APP_PORT"
 
-# Remind about BASE_URL if not set
+# Require BASE_URL — prompt interactively if not already set
 BASE_URL_VAL="$(grep '^BASE_URL=' "$ENV_FILE" | cut -d= -f2- | tr -d ' ')"
 if [ -z "$BASE_URL_VAL" ]; then
-  warn "BASE_URL is not set in .env."
-  warn "  If running behind a reverse proxy at a subpath, set it:"
-  warn "  BASE_URL=https://apps.example.com/wiki"
+  echo ""
+  warn "BASE_URL is not set. This is required for the app to work behind a reverse proxy."
+  echo "  Examples:"
+  echo "    https://apps.example.com/wiki   (subpath deployment)"
+  echo "    https://wiki.example.com        (root deployment)"
+  echo ""
+  read -r -p "  Enter public BASE_URL (leave blank to skip — set it manually in .env later): " BASE_URL_INPUT
+  BASE_URL_INPUT="$(echo "$BASE_URL_INPUT" | tr -d ' ')"
+  if [ -n "$BASE_URL_INPUT" ]; then
+    if grep -q '^BASE_URL=' "$ENV_FILE"; then
+      if [ "$PLATFORM" = "macos" ]; then
+        sed -i '' "s|^BASE_URL=.*|BASE_URL=$BASE_URL_INPUT|" "$ENV_FILE"
+      else
+        sed -i "s|^BASE_URL=.*|BASE_URL=$BASE_URL_INPUT|" "$ENV_FILE"
+      fi
+    else
+      echo "BASE_URL=$BASE_URL_INPUT" >> "$ENV_FILE"
+    fi
+    ok "BASE_URL set to: $BASE_URL_INPUT"
+    BASE_URL_VAL="$BASE_URL_INPUT"
+  else
+    warn "BASE_URL not set — routing will break on subpath deployments."
+    warn "Edit $ENV_FILE and set BASE_URL, then restart the service."
+  fi
 fi
 
 # Remind about SESSION_SECRET

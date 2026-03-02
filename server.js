@@ -409,23 +409,26 @@ app.set('trust proxy', 1);
 // Subpath / reverse-proxy helpers
 // ---------------------------------------------------------------------------
 
-// Returns the pathname prefix from BASE_URL, e.g. "/wiki" from
-// "https://apps.diller.org/wiki".  Empty string when BASE_URL is not set.
-function getBasePath() {
-  if (!process.env.BASE_URL) return '';
-  try {
-    return new URL(process.env.BASE_URL).pathname.replace(/\/$/, '');
-  } catch {
-    return '';
+// Returns the subpath prefix for a given request.
+// Priority:
+//   1. BASE_URL env var  (e.g. BASE_URL=https://apps.diller.org/wiki → "/wiki")
+//   2. X-Forwarded-Prefix header sent by nginx  (e.g. "X-Forwarded-Prefix: /wiki")
+//   3. Empty string — app is served at the root
+function getBasePathForRequest(req) {
+  if (process.env.BASE_URL) {
+    try { return new URL(process.env.BASE_URL).pathname.replace(/\/$/, ''); } catch {}
   }
+  const prefix = req && req.headers['x-forwarded-prefix'];
+  if (prefix) return String(prefix).replace(/\/$/, '');
+  return '';
 }
 
 // Injects a <base> tag and window.APP_BASE into HTML so that:
 //   • all relative asset paths (css/style.css, js/app.js …) resolve correctly
 //     regardless of the URL depth the browser is visiting
 //   • JS code can prepend APP_BASE to absolute API paths (/api/…)
-function injectMeta(html) {
-  const base = getBasePath();
+function injectMeta(html, req) {
+  const base = getBasePathForRequest(req);
   const baseHref = base ? base + '/' : '/';
   const injection = `<base href="${baseHref}">\n    <script>window.APP_BASE = '${base}';</script>`;
   return html.replace('<head>', `<head>\n    ${injection}`);
@@ -501,7 +504,7 @@ app.use((req, res, next) => {
   if (req.path.startsWith('/api/')) {
     return res.status(503).json({ error: 'Server not yet configured. Complete setup at /setup.' });
   }
-  res.redirect(getBasePath() + '/setup');
+  res.redirect(getBasePathForRequest(req) + '/setup');
 });
 
 app.use(express.static('public'));
@@ -1527,9 +1530,9 @@ app.get('/api/git/status', requireAuth, async (req, res) => {
 
 // Serve setup page (only before admin is created)
 app.get('/setup', (req, res) => {
-  if (isAdminConfigured()) return res.redirect(process.env.BASE_URL || '/');
+  if (isAdminConfigured()) return res.redirect(process.env.BASE_URL || getBasePathForRequest(req) + '/');
   const html = fsSync.readFileSync(path.join(__dirname, 'public', 'setup.html'), 'utf8');
-  res.send(injectMeta(html));
+  res.send(injectMeta(html, req));
 });
 
 // Create the admin account (one-time, rate-limited)
@@ -1579,7 +1582,7 @@ app.post('/api/setup', setupLimiter, async (req, res) => {
 // Serve admin login page
 app.get('/admin-login', (req, res) => {
   const html = fsSync.readFileSync(path.join(__dirname, 'public', 'admin-login.html'), 'utf8');
-  res.send(injectMeta(html));
+  res.send(injectMeta(html, req));
 });
 
 // Authenticate with local admin credentials (rate-limited)
@@ -1626,7 +1629,7 @@ app.post('/api/admin-logout', (req, res) => {
 // ---------------------------------------------------------------------------
 app.get('*', (req, res) => {
   const html = fsSync.readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf8');
-  res.send(injectMeta(html));
+  res.send(injectMeta(html, req));
 });
 
 // Start server only when run directly (not when imported by tests)
