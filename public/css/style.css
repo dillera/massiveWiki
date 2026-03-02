@@ -579,7 +579,9 @@ body {
     margin: 0;
 }
 
-.admin-section > *:not(h3) {
+/* Apply section body padding to div/form containers, never to naked buttons */
+.admin-section > div,
+.admin-section > form {
     padding: 0.75rem;
 }
 
@@ -655,16 +657,47 @@ body {
 .auth-config {
     display: flex;
     flex-direction: column;
-    gap: 0.65rem;
+    gap: 0.6rem;
 }
 
-.auth-status {
-    font-size: 0.82rem;
-    color: var(--text-2);
+.auth-status-row {
     display: flex;
+    gap: 1.25rem;
+    font-size: 0.8rem;
+    flex-wrap: wrap;
+    padding-bottom: 0.4rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.auth-status-item { color: var(--text-2); }
+
+.auth-save-row { padding-top: 0.2rem; }
+
+.supabase-config-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+}
+
+.supabase-actions {
+    display: flex;
+    align-items: center;
     gap: 1rem;
     flex-wrap: wrap;
+    padding-top: 0.2rem;
 }
+
+.supabase-links {
+    display: flex;
+    gap: 0.75rem;
+    font-size: 0.78rem;
+}
+
+.supabase-links a {
+    color: var(--primary);
+    text-decoration: none;
+}
+.supabase-links a:hover { text-decoration: underline; }
 
 .toggle-label {
     display: flex;

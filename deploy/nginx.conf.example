@@ -1,0 +1,48 @@
+# massiveWiki — nginx reverse proxy configuration
+#
+# This example proxies the app at https://apps.example.com/wiki
+# Adjust server_name, SSL cert paths, and the subpath as needed.
+#
+# Place this file in /etc/nginx/sites-available/massivewiki and symlink to
+# /etc/nginx/sites-enabled/massivewiki, then reload nginx.
+
+server {
+    listen 80;
+    server_name apps.example.com;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name apps.example.com;
+
+    ssl_certificate     /etc/letsencrypt/live/apps.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/apps.example.com/privkey.pem;
+
+    # --- Proxy /wiki to the local massiveWiki instance (port 3500) ---
+    location /wiki {
+        proxy_pass         http://127.0.0.1:3500;
+        proxy_http_version 1.1;
+
+        # Required for WebSocket support (future-proofing)
+        proxy_set_header Upgrade    $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        # Pass real client info so Express (trust proxy = 1) sees the correct IP
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Preserve the /wiki prefix — the app sees the full path including /wiki
+        # If you want to strip the prefix, use proxy_pass http://127.0.0.1:3500/;
+        # (trailing slash) and update BASE_URL accordingly.
+
+        # Increase timeouts for long-running requests (uploads, etc.)
+        proxy_read_timeout 120s;
+        proxy_send_timeout 120s;
+
+        # Forward cookies (needed for express-session admin login)
+        proxy_pass_header Set-Cookie;
+    }
+}

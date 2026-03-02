@@ -1,0 +1,20 @@
+[Unit]
+Description=massiveWiki Node.js Server
+After=network.target
+
+[Service]
+Type=simple
+User=REPLACE_WITH_USER
+WorkingDirectory=REPLACE_WITH_APP_DIR
+ExecStart=/usr/bin/node server.js
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=massivewiki
+
+# Load environment from .env file
+EnvironmentFile=REPLACE_WITH_APP_DIR/.env
+
+[Install]
+WantedBy=multi-user.target

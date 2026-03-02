@@ -14,14 +14,15 @@ const editMode = document.getElementById('editMode');
 const editor = document.getElementById('editor');
 const notification = document.getElementById('notification');
 
-// Authenticated fetch — attaches the Supabase Bearer token to write requests
+// Authenticated fetch — attaches the Supabase Bearer token (if available) and
+// always sends credentials (cookies) so the local admin session also works.
 async function authFetch(url, options = {}) {
     const token = await getAccessToken();
     const headers = { ...(options.headers || {}) };
     if (token) {
         headers['Authorization'] = `Bearer ${token}`;
     }
-    return fetch(url, { ...options, headers });
+    return fetch(url, { ...options, headers, credentials: 'same-origin' });
 }
 
 // Initialize
@@ -83,8 +84,7 @@ function setupEventListeners() {
 
     // Auth configuration
     document.getElementById('saveAuthConfigBtn').addEventListener('click', saveAuthConfig);
-    document.getElementById('saveSupabaseConfigBtn').addEventListener('click', () => saveSupabaseConfig('new'));
-    document.getElementById('updateSupabaseConfigBtn').addEventListener('click', () => saveSupabaseConfig('update'));
+    document.getElementById('saveSupabaseConfigBtn').addEventListener('click', saveSupabaseConfig);
 
     // Appearance controls
     document.getElementById('applyAppearanceBtn').addEventListener('click', applyAppearance);
@@ -1024,77 +1024,55 @@ async function saveConfig() {
 // Auth Configuration Management
 async function loadAuthStatus() {
     try {
-        const response = await fetch('/api/auth/config');
+        const response = await fetch('/api/auth/config', { credentials: 'same-origin' });
         const authConfig = await response.json();
 
-        const toggle = document.getElementById('authEnabledToggle');
-        const statusText = document.getElementById('authStatusText');
-        const supabaseStatus = document.getElementById('supabaseStatus');
-        const setupInstructions = document.getElementById('authSetupInstructions');
-        const managementLinks = document.getElementById('authManagementLinks');
+        document.getElementById('authEnabledToggle').checked = authConfig.authEnabled;
 
-        toggle.checked = authConfig.authEnabled;
+        document.getElementById('authStatusText').innerHTML = authConfig.authEnabled
+            ? '<span style="color:var(--success);font-weight:600;">Enabled</span>'
+            : '<span style="color:var(--text-3);">Disabled</span>';
+
+        const supabaseStatus = document.getElementById('supabaseStatus');
+        const dashLinks = document.getElementById('supabaseDashboardLinks');
 
         if (authConfig.hasSupabaseConfig) {
-            supabaseStatus.innerHTML = '<strong>Supabase:</strong> <span style="color: green;">✓ Configured</span>';
-            setupInstructions.style.display = 'none';
-            managementLinks.style.display = 'block';
-
-            // Pre-fill the update form with the current URL (key intentionally left blank)
-            document.getElementById('supabaseUrlInputEdit').value = authConfig.supabaseUrl || '';
-
-            // Build project-specific dashboard links from the URL
+            supabaseStatus.innerHTML = 'Supabase: <span style="color:var(--success);font-weight:600;">✓ Connected</span>';
+            // Pre-fill URL; leave key blank for security
+            document.getElementById('supabaseUrlInput').value = authConfig.supabaseUrl || '';
+            // Show dashboard links
             const projectRef = (authConfig.supabaseUrl || '').replace('https://', '').split('.')[0];
             const base = `https://supabase.com/dashboard/project/${projectRef}`;
             document.getElementById('supabaseUsersLink').href = `${base}/auth/users`;
             document.getElementById('supabasePoliciesLink').href = `${base}/auth/policies`;
             document.getElementById('supabaseAuthSettingsLink').href = `${base}/settings/auth`;
+            dashLinks.style.display = 'flex';
         } else {
-            supabaseStatus.innerHTML = '<strong>Supabase:</strong> <span style="color: orange;">⚠ Not configured</span>';
-            setupInstructions.style.display = 'block';
-            managementLinks.style.display = 'none';
+            supabaseStatus.innerHTML = 'Supabase: <span style="color:var(--warn);">⚠ Not configured</span>';
+            dashLinks.style.display = 'none';
         }
-
-        statusText.innerHTML = authConfig.authEnabled
-            ? '<span style="color: green;">Enabled</span>'
-            : '<span style="color: gray;">Disabled</span>';
-
     } catch (error) {
         console.error('Error loading auth status:', error);
     }
 }
 
-async function saveSupabaseConfig(mode) {
-    const urlInput = mode === 'update'
-        ? document.getElementById('supabaseUrlInputEdit')
-        : document.getElementById('supabaseUrlInput');
-    const keyInput = mode === 'update'
-        ? document.getElementById('supabaseAnonKeyInputEdit')
-        : document.getElementById('supabaseAnonKeyInput');
-    const btn = mode === 'update'
-        ? document.getElementById('updateSupabaseConfigBtn')
-        : document.getElementById('saveSupabaseConfigBtn');
-
-    const supabaseUrl = urlInput.value.trim();
-    const supabaseAnonKey = keyInput.value.trim();
+async function saveSupabaseConfig() {
+    const supabaseUrl = document.getElementById('supabaseUrlInput').value.trim();
+    const supabaseAnonKey = document.getElementById('supabaseAnonKeyInput').value.trim();
+    const btn = document.getElementById('saveSupabaseConfigBtn');
 
     if (!supabaseUrl) {
         showNotification('Project URL is required.', 'error');
         return;
     }
-    if (!supabaseAnonKey && mode === 'new') {
-        showNotification('Anon key is required.', 'error');
-        return;
-    }
 
-    // When updating, allow leaving the key blank to keep the existing one.
-    // In that case, fetch the current key from the server config.
+    // If key field is blank, reuse the existing key from the server
     let finalKey = supabaseAnonKey;
-    if (mode === 'update' && !supabaseAnonKey) {
-        const cfg = await fetch('/api/auth/config').then(r => r.json());
+    if (!finalKey) {
+        const cfg = await fetch('/api/auth/config', { credentials: 'same-origin' }).then(r => r.json());
         finalKey = cfg.supabaseAnonKey || '';
         if (!finalKey) {
-            showNotification('No existing key found — please enter the anon key.', 'error');
+            showNotification('Anon key is required — paste it from your Supabase project settings.', 'error');
             return;
         }
     }

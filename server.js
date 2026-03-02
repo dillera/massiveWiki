@@ -405,6 +405,9 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB max
 });
 
+// Trust the first proxy (nginx) — required for correct IP detection and secure cookies behind a reverse proxy
+app.set('trust proxy', 1);
+
 // Middleware
 app.use(helmet({
   contentSecurityPolicy: {
@@ -429,11 +432,28 @@ app.use(express.json());
 
 // ---------------------------------------------------------------------------
 // Session middleware — used for the local admin failsafe account.
-// In production, set SESSION_SECRET in .env so sessions survive restarts.
-// Must run before the setup guard and before static files.
+// Auto-generates SESSION_SECRET and saves it to .env if not already set,
+// so sessions survive server restarts without manual configuration.
 // ---------------------------------------------------------------------------
+if (!process.env.SESSION_SECRET) {
+  const generated = crypto.randomBytes(32).toString('hex');
+  process.env.SESSION_SECRET = generated;
+  const envPath = path.join(__dirname, '.env');
+  try {
+    let envContent = '';
+    try { envContent = fsSync.readFileSync(envPath, 'utf8'); } catch { /* new file */ }
+    if (!envContent.includes('SESSION_SECRET=')) {
+      envContent += `\nSESSION_SECRET=${generated}\n`;
+      fsSync.writeFileSync(envPath, envContent, { mode: 0o600 });
+      console.log('Generated and saved SESSION_SECRET to .env');
+    }
+  } catch (e) {
+    console.warn('Could not save SESSION_SECRET to .env:', e.message);
+  }
+}
+
 app.use(session({
-  secret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex'),
+  secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
   cookie: {
@@ -1248,6 +1268,7 @@ app.get('/api/auth/config', async (req, res) => {
       hasSupabaseConfig: !!(process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY),
       localAdminConfigured: isAdminConfigured(),
       localAdminLoggedIn: !!(req.session && req.session.adminLoggedIn),
+      baseUrl: process.env.BASE_URL || null,
     });
   } catch (error) {
     console.error('Error loading auth config:', error);

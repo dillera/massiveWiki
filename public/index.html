@@ -101,7 +101,7 @@
 
                     <div class="admin-section">
                         <h3>Configuration</h3>
-                        <button id="editConfigBtn" class="btn btn-primary">Edit Config</button>
+                        <div><button id="editConfigBtn" class="btn btn-primary">Edit Config</button></div>
                     </div>
 
                     <div class="admin-section">
@@ -122,9 +122,9 @@
                     <div class="admin-section">
                         <h3>Authentication</h3>
                         <div class="auth-config">
-                            <div class="auth-status" id="authStatus">
-                                <p><strong>Status:</strong> <span id="authStatusText">Checking...</span></p>
-                                <p id="supabaseStatus"></p>
+                            <div class="auth-status-row">
+                                <span class="auth-status-item">Auth: <span id="authStatusText">Checking…</span></span>
+                                <span class="auth-status-item" id="supabaseStatus"></span>
                             </div>
 
                             <div class="control-group">
@@ -132,58 +132,36 @@
                                     <input type="checkbox" id="authEnabledToggle">
                                     <span>Enable Authentication</span>
                                 </label>
-                                <p class="help-text">When enabled, certain pages and features will require login</p>
+                                <p class="help-text">Require login to edit pages and view protected content.</p>
                             </div>
 
-                            <!-- Supabase config form — shown when not yet configured -->
-                            <div id="authSetupInstructions" style="display: none;">
-                                <div class="info-box">
-                                    <h4>🔧 Connect Supabase</h4>
-                                    <p class="help-text">Find these values in your Supabase project under <strong>Settings → API</strong>. Don't have a project? <a href="https://supabase.com" target="_blank">Create one free at supabase.com</a>.</p>
-                                    <div class="control-group" style="margin-top: 0.75rem;">
-                                        <label for="supabaseUrlInput">Project URL</label>
-                                        <input type="url" id="supabaseUrlInput" class="text-input" placeholder="https://your-project.supabase.co">
-                                    </div>
-                                    <div class="control-group">
-                                        <label for="supabaseAnonKeyInput">Anon / Public Key</label>
-                                        <input type="text" id="supabaseAnonKeyInput" class="text-input" placeholder="eyJ…">
-                                        <p class="help-text">Use the <em>anon</em> key, not the service_role key.</p>
-                                    </div>
-                                    <button id="saveSupabaseConfigBtn" class="btn btn-primary">Save &amp; Activate</button>
+                            <div class="auth-save-row">
+                                <button id="saveAuthConfigBtn" class="btn btn-primary">Save Auth Settings</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="admin-section">
+                        <h3>Supabase Configuration</h3>
+                        <div class="supabase-config-body">
+                            <p class="help-text" style="margin-bottom:0.6rem;">Find these values in your Supabase project under <strong>Settings → API</strong>. <a href="https://supabase.com" target="_blank">Create a free project →</a></p>
+                            <div class="control-group">
+                                <label for="supabaseUrlInput">Project URL</label>
+                                <input type="url" id="supabaseUrlInput" class="text-input" placeholder="https://your-project.supabase.co">
+                            </div>
+                            <div class="control-group">
+                                <label for="supabaseAnonKeyInput">Anon / Public Key</label>
+                                <input type="text" id="supabaseAnonKeyInput" class="text-input" placeholder="eyJ… (leave blank to keep existing)">
+                                <p class="help-text">Use the <em>anon</em> key, not the service_role key.</p>
+                            </div>
+                            <div class="supabase-actions">
+                                <button id="saveSupabaseConfigBtn" class="btn btn-primary">Save &amp; Activate</button>
+                                <div id="supabaseDashboardLinks" style="display:none;" class="supabase-links">
+                                    <a id="supabaseUsersLink" href="#" target="_blank">Users</a>
+                                    <a id="supabasePoliciesLink" href="#" target="_blank">Policies</a>
+                                    <a id="supabaseAuthSettingsLink" href="#" target="_blank">Auth Settings</a>
                                 </div>
                             </div>
-
-                            <!-- Shown when Supabase is already configured -->
-                            <div id="authManagementLinks" style="display: none;">
-                                <div class="info-box">
-                                    <h4>🔐 User Management</h4>
-                                    <p>Manage users and authentication in your Supabase dashboard:</p>
-                                    <ul>
-                                        <li><a id="supabaseUsersLink" href="#" target="_blank">Manage Users</a></li>
-                                        <li><a id="supabasePoliciesLink" href="#" target="_blank">Security Policies</a></li>
-                                        <li><a id="supabaseAuthSettingsLink" href="#" target="_blank">Auth Settings</a></li>
-                                    </ul>
-                                </div>
-
-                                <!-- Update credentials (collapsed by default) -->
-                                <details style="margin-top: 0.75rem;">
-                                    <summary class="help-text" style="cursor: pointer;">Update Supabase credentials</summary>
-                                    <div class="info-box" style="margin-top: 0.5rem;">
-                                        <div class="control-group">
-                                            <label for="supabaseUrlInputEdit">Project URL</label>
-                                            <input type="url" id="supabaseUrlInputEdit" class="text-input" placeholder="https://your-project.supabase.co">
-                                        </div>
-                                        <div class="control-group">
-                                            <label for="supabaseAnonKeyInputEdit">Anon / Public Key</label>
-                                            <input type="text" id="supabaseAnonKeyInputEdit" class="text-input" placeholder="Paste new key to replace current">
-                                            <p class="help-text">Leave blank to keep the existing key.</p>
-                                        </div>
-                                        <button id="updateSupabaseConfigBtn" class="btn btn-primary">Update Credentials</button>
-                                    </div>
-                                </details>
-                            </div>
-
-                            <button id="saveAuthConfigBtn" class="btn btn-primary">Save Auth Settings</button>
                         </div>
                     </div>
 

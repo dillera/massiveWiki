@@ -84,7 +84,7 @@ async function signInWithGitHub() {
         const { data, error } = await supabaseClient.auth.signInWithOAuth({
             provider: 'github',
             options: {
-                redirectTo: window.location.origin
+                redirectTo: authConfig.baseUrl || window.location.origin
             }
         });
 
@@ -112,7 +112,7 @@ async function signInWithDiscord() {
         const { data, error } = await supabaseClient.auth.signInWithOAuth({
             provider: 'discord',
             options: {
-                redirectTo: window.location.origin
+                redirectTo: authConfig.baseUrl || window.location.origin
             }
         });
 
