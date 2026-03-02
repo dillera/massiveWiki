@@ -143,14 +143,20 @@ function setupEventListeners() {
 
 // Routing
 function handleRouting() {
-    const path = window.location.pathname;
-    currentPage = path === '/' ? 'home' : path.slice(1);
+    const base = window.APP_BASE || '';
+    const pathname = window.location.pathname;
+    // Strip the subpath prefix (e.g. /wiki) so the SPA sees wiki-relative paths
+    const localPath = (base && pathname.startsWith(base))
+        ? pathname.slice(base.length)
+        : pathname;
+    currentPage = (localPath === '/' || localPath === '') ? 'home' : localPath.replace(/^\//, '');
     loadPage(currentPage);
     updateBreadcrumbs();
 }
 
 function navigateTo(path) {
-    const url = path === 'home' ? '/' : `/${path}`;
+    const base = window.APP_BASE || '';
+    const url = path === 'home' ? base + '/' : `${base}/${path}`;
     window.history.pushState({}, '', url);
     handleRouting();
 }
@@ -261,7 +267,8 @@ async function handleWikilinkClick(e) {
 function updateBreadcrumbs() {
     const parts = currentPage.split('/').filter(p => p);
 
-    let html = '<a href="/">Home</a>';
+    const base = window.APP_BASE || '';
+    let html = `<a href="${base}/">Home</a>`;
     let path = '';
 
     parts.forEach((part, index) => {
@@ -272,7 +279,7 @@ function updateBreadcrumbs() {
         if (isLast) {
             html += `<span class="separator">/</span><span>${displayName}</span>`;
         } else {
-            html += `<span class="separator">/</span><a href="/${path}">${displayName}</a>`;
+            html += `<span class="separator">/</span><a href="${base}/${path}">${displayName}</a>`;
         }
     });
 
@@ -282,7 +289,10 @@ function updateBreadcrumbs() {
     breadcrumbs.querySelectorAll('a').forEach(link => {
         link.addEventListener('click', (e) => {
             e.preventDefault();
-            navigateTo(link.getAttribute('href').slice(1) || 'home');
+            // Strip base prefix then leading slash to get the wiki page path
+            const href = link.getAttribute('href');
+            const pagePath = href.replace(base, '').replace(/^\//, '') || 'home';
+            navigateTo(pagePath);
         });
     });
 }
@@ -486,7 +496,7 @@ function openPreview() {
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>Preview - ${currentPage}</title>
-            <link rel="stylesheet" href="/css/style.css">
+            <link rel="stylesheet" href="${window.APP_BASE || ''}/css/style.css">
             <style>
                 body {
                     padding: 2rem;
