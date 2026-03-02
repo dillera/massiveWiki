@@ -83,6 +83,12 @@
                     <button id="exitAdminBtn" class="btn">← Back to Wiki</button>
                 </div>
                 <div class="admin-content">
+                    <!-- Session-expired banner: shown when local admin session is not active -->
+                    <div id="adminSessionBanner" class="admin-session-banner" style="display:none;">
+                        <strong>Session expired</strong> — your admin session is no longer active.
+                        <a id="adminLoginLink" href="">Log in again</a> to make changes.
+                    </div>
+
                     <div class="admin-section">
                         <h3>Special Pages</h3>
                         <div class="special-pages-list">

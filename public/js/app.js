@@ -265,9 +265,16 @@ async function handleWikilinkClick(e) {
 
 // Breadcrumbs
 function updateBreadcrumbs() {
-    const parts = currentPage.split('/').filter(p => p);
+    const parts = currentPage.split('/').filter(p => p && p !== 'home');
 
     const base = window.APP_BASE || '';
+
+    // On the home page, just show a plain "Home" label with no link
+    if (parts.length === 0) {
+        breadcrumbs.innerHTML = '<span>Home</span>';
+        return;
+    }
+
     let html = `<a href="${base}/">Home</a>`;
     let path = '';
 
@@ -987,6 +994,7 @@ async function saveSpecialPage() {
         });
 
         if (!response.ok) {
+            if (handleAuthFailure(response.status)) return;
             const data = await response.json().catch(() => ({}));
             throw new Error(data.error || `Server error (${response.status})`);
         }
@@ -1034,6 +1042,7 @@ async function saveConfig() {
         });
 
         if (!response.ok) {
+            if (handleAuthFailure(response.status)) return;
             const data = await response.json().catch(() => ({}));
             throw new Error(data.error || `Server error (${response.status})`);
         }
@@ -1055,13 +1064,48 @@ async function saveConfig() {
     }
 }
 
+// Redirect to admin login on auth failure (401 = no session, 503 = not configured)
+function handleAuthFailure(status) {
+    if (status === 401 || status === 503) {
+        window.location.href = (window.APP_BASE || '') + '/admin-login';
+        return true;
+    }
+    return false;
+}
+
 // Auth Configuration Management
 async function loadAuthStatus() {
     try {
         const response = await fetch('/api/auth/config', { credentials: 'same-origin' });
         const authConfig = await response.json();
 
+        // Show session-expired banner and disable write buttons when not logged in
+        const banner = document.getElementById('adminSessionBanner');
+        const loginLink = document.getElementById('adminLoginLink');
+        const isLoggedIn = authConfig.localAdminLoggedIn;
+
+        if (!isLoggedIn) {
+            loginLink.href = (window.APP_BASE || '') + '/admin-login';
+            banner.style.display = 'block';
+        } else {
+            banner.style.display = 'none';
+        }
+
+        // Disable/enable all admin write buttons based on login state
+        const writeButtons = [
+            'saveAuthConfigBtn', 'saveSupabaseConfigBtn', 'saveSpecialPageBtn',
+            'saveConfigBtn', 'editConfigBtn', 'uploadLogoBtn', 'deleteLogoBtn',
+        ];
+        writeButtons.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.disabled = !isLoggedIn;
+        });
+        document.querySelectorAll('.edit-special').forEach(btn => {
+            btn.disabled = !isLoggedIn;
+        });
+
         document.getElementById('authEnabledToggle').checked = authConfig.authEnabled;
+        document.getElementById('authEnabledToggle').disabled = !isLoggedIn;
 
         document.getElementById('authStatusText').innerHTML = authConfig.authEnabled
             ? '<span style="color:var(--success);font-weight:600;">Enabled</span>'
@@ -1124,6 +1168,7 @@ async function saveSupabaseConfig() {
         const data = await resp.json();
 
         if (!resp.ok) {
+            if (handleAuthFailure(resp.status)) return;
             showNotification(data.error || 'Failed to save Supabase config.', 'error');
             return;
         }
@@ -1158,6 +1203,7 @@ async function saveAuthConfig() {
         });
 
         if (!saveResponse.ok) {
+            if (handleAuthFailure(saveResponse.status)) return;
             const data = await saveResponse.json().catch(() => ({}));
             throw new Error(data.error || `Server error (${saveResponse.status})`);
         }

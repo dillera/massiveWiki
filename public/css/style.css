@@ -533,6 +533,25 @@ body {
 .btn-icon:hover { color: var(--text); }
 
 /* ── Admin Panel ─────────────────────────────────────────────────────────── */
+
+.admin-session-banner {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: #fef3c7;
+    border: 1px solid #f59e0b;
+    color: #92400e;
+    border-radius: 6px;
+    padding: 0.65rem 0.9rem;
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
+}
+.admin-session-banner a {
+    color: #92400e;
+    font-weight: 600;
+    text-decoration: underline;
+}
+
 .admin-view {
     padding: 1.25rem 1.5rem;
     max-width: 720px;

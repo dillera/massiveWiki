@@ -520,7 +520,7 @@ app.use((req, res, next) => {
   res.redirect(getBasePathForRequest(req) + '/setup');
 });
 
-app.use(express.static('public'));
+app.use(express.static('public', { index: false }));
 app.use('/images', express.static(IMAGES_DIR));
 
 // Configure marked for GitHub Flavored Markdown
