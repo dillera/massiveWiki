@@ -1,3 +1,18 @@
+// Subpath support: when the app is served at a subpath (e.g. /wiki), all
+// absolute-path API calls (/api/…) must be prefixed with that path.
+// window.APP_BASE is injected by server.js via injectMeta() at request time.
+(function () {
+    const base = window.APP_BASE || '';
+    if (!base) return;
+    const _fetch = window.fetch.bind(window);
+    window.fetch = function (url, ...args) {
+        if (typeof url === 'string' && url.startsWith('/') && !url.startsWith('//')) {
+            url = base + url;
+        }
+        return _fetch(url, ...args);
+    };
+})();
+
 // State
 let currentPage = 'home';
 let isEditing = false;

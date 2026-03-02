@@ -408,6 +408,32 @@ const upload = multer({
 // Trust the first proxy (nginx) — required for correct IP detection and secure cookies behind a reverse proxy
 app.set('trust proxy', 1);
 
+// ---------------------------------------------------------------------------
+// Subpath / reverse-proxy helpers
+// ---------------------------------------------------------------------------
+
+// Returns the pathname prefix from BASE_URL, e.g. "/wiki" from
+// "https://apps.diller.org/wiki".  Empty string when BASE_URL is not set.
+function getBasePath() {
+  if (!process.env.BASE_URL) return '';
+  try {
+    return new URL(process.env.BASE_URL).pathname.replace(/\/$/, '');
+  } catch {
+    return '';
+  }
+}
+
+// Injects a <base> tag and window.APP_BASE into HTML so that:
+//   • all relative asset paths (css/style.css, js/app.js …) resolve correctly
+//     regardless of the URL depth the browser is visiting
+//   • JS code can prepend APP_BASE to absolute API paths (/api/…)
+function injectMeta(html) {
+  const base = getBasePath();
+  const baseHref = base ? base + '/' : '/';
+  const injection = `<base href="${baseHref}">\n    <script>window.APP_BASE = '${base}';</script>`;
+  return html.replace('<head>', `<head>\n    ${injection}`);
+}
+
 // Middleware
 app.use(helmet({
   contentSecurityPolicy: {
@@ -478,7 +504,7 @@ app.use((req, res, next) => {
   if (req.path.startsWith('/api/')) {
     return res.status(503).json({ error: 'Server not yet configured. Complete setup at /setup.' });
   }
-  res.redirect('/setup');
+  res.redirect(getBasePath() + '/setup');
 });
 
 app.use(express.static('public'));
@@ -1504,8 +1530,9 @@ app.get('/api/git/status', requireAuth, async (req, res) => {
 
 // Serve setup page (only before admin is created)
 app.get('/setup', (req, res) => {
-  if (isAdminConfigured()) return res.redirect('/');
-  res.sendFile(path.join(__dirname, 'public', 'setup.html'));
+  if (isAdminConfigured()) return res.redirect(process.env.BASE_URL || '/');
+  const html = fsSync.readFileSync(path.join(__dirname, 'public', 'setup.html'), 'utf8');
+  res.send(injectMeta(html));
 });
 
 // Create the admin account (one-time, rate-limited)
@@ -1554,7 +1581,8 @@ app.post('/api/setup', setupLimiter, async (req, res) => {
 
 // Serve admin login page
 app.get('/admin-login', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'admin-login.html'));
+  const html = fsSync.readFileSync(path.join(__dirname, 'public', 'admin-login.html'), 'utf8');
+  res.send(injectMeta(html));
 });
 
 // Authenticate with local admin credentials (rate-limited)
@@ -1600,7 +1628,8 @@ app.post('/api/admin-logout', (req, res) => {
 // Serve main app
 // ---------------------------------------------------------------------------
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  const html = fsSync.readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf8');
+  res.send(injectMeta(html));
 });
 
 // Start server only when run directly (not when imported by tests)

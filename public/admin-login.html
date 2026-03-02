@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="css/style.css">
     <style>
         body {
             display: flex;
@@ -139,7 +139,7 @@
         </p>
 
         <p class="alt-link" style="margin-top:.75rem;">
-            <a href="/">Back to wiki</a>
+            <a href=".">Back to wiki</a>
         </p>
     </div>
 
@@ -183,7 +183,7 @@
                 }
 
                 // Success — go to the wiki
-                window.location.href = '/';
+                window.location.href = window.APP_BASE || '/';
             } catch (err) {
                 submitBtn.disabled = false;
                 submitBtn.textContent = 'Sign In';

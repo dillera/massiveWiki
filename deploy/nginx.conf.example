@@ -19,9 +19,11 @@ server {
     ssl_certificate     /etc/letsencrypt/live/apps.example.com/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/apps.example.com/privkey.pem;
 
-    # --- Proxy /wiki to the local massiveWiki instance (port 3500) ---
-    location /wiki {
-        proxy_pass         http://127.0.0.1:3500;
+    # --- Proxy /wiki/ to the local massiveWiki instance (port 3500) ---
+    # The trailing slash on BOTH location and proxy_pass is required — nginx
+    # strips the /wiki prefix before forwarding so the app sees clean paths.
+    location /wiki/ {
+        proxy_pass         http://127.0.0.1:3500/;
         proxy_http_version 1.1;
 
         # Required for WebSocket support (future-proofing)
@@ -34,9 +36,9 @@ server {
         proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
 
-        # Preserve the /wiki prefix — the app sees the full path including /wiki
-        # If you want to strip the prefix, use proxy_pass http://127.0.0.1:3500/;
-        # (trailing slash) and update BASE_URL accordingly.
+        # The /wiki prefix is stripped by nginx before forwarding.
+        # The app uses BASE_URL=https://apps.example.com/wiki to reconstruct
+        # correct redirects and OAuth callback URLs.
 
         # Increase timeouts for long-running requests (uploads, etc.)
         proxy_read_timeout 120s;
