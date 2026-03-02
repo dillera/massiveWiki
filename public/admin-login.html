@@ -168,7 +168,7 @@
             submitBtn.textContent = 'Signing in…';
 
             try {
-                const resp = await fetch('/api/admin-login', {
+                const resp = await fetch((window.APP_BASE || '') + '/api/admin-login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, password }),
