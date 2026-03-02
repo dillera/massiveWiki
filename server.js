@@ -197,19 +197,24 @@ function isAdminConfigured() {
   return fsSync.existsSync(ADMIN_FILE);
 }
 
-// Initialize wiki directory structure
-async function initializeWiki() {
-  console.log(`Wiki home directory: ${WIKI_HOME}`);
+// Initialize wiki directory structure.
+// Accepts an optional wikiHome override so unit tests can use a temp dir.
+async function initializeWiki(wikiHome = WIKI_HOME) {
+  const pagesDir = path.join(wikiHome, 'pages');
+  const imagesDir = path.join(wikiHome, 'images');
+  const wikiDir   = path.join(wikiHome, '_wiki');
+
+  console.log(`Wiki home directory: ${wikiHome}`);
 
   // Check if this is first run
-  const homePagePath = path.join(PAGES_DIR, 'home.md');
+  const homePagePath = path.join(pagesDir, 'home.md');
   const isFirstRun = !fsSync.existsSync(homePagePath);
 
   // Create directories
-  await fs.mkdir(WIKI_HOME, { recursive: true });
-  await fs.mkdir(PAGES_DIR, { recursive: true });
-  await fs.mkdir(IMAGES_DIR, { recursive: true });
-  await fs.mkdir(WIKI_DIR, { recursive: true });
+  await fs.mkdir(wikiHome,   { recursive: true });
+  await fs.mkdir(pagesDir,   { recursive: true });
+  await fs.mkdir(imagesDir,  { recursive: true });
+  await fs.mkdir(wikiDir,    { recursive: true });
 
   if (isFirstRun) {
     console.log('First run detected - initializing wiki structure...');
@@ -304,12 +309,12 @@ Your wiki is backed up to Git!
 ## Need Help?
 
 - Check the Manual.md file in the project root
-- All your pages are stored in: \`${PAGES_DIR}\`
-- Images are stored in: \`${IMAGES_DIR}\`
+- All your pages are stored in: \`${pagesDir}\`
+- Images are stored in: \`${imagesDir}\`
 
 Happy wiki-ing!
 `;
-    await fs.writeFile(path.join(PAGES_DIR, 'getting-started.md'), gettingStartedContent, 'utf-8');
+    await fs.writeFile(path.join(pagesDir, 'getting-started.md'), gettingStartedContent, 'utf-8');
     console.log('✓ Created getting-started.md');
 
     // Create _sidebar.md
@@ -326,20 +331,20 @@ Browse pages using the left sidebar tree view.
 
 - [Markdown Guide](https://guides.github.com/features/mastering-markdown/)
 `;
-    await fs.writeFile(path.join(WIKI_DIR, '_sidebar.md'), sidebarContent, 'utf-8');
+    await fs.writeFile(path.join(wikiDir, '_sidebar.md'), sidebarContent, 'utf-8');
     console.log('✓ Created _sidebar.md');
 
     // Create _footer.md
     const footerContent = `---
 **Massive Wiki** | Powered by Markdown | [Admin](/admin)
 `;
-    await fs.writeFile(path.join(WIKI_DIR, '_footer.md'), footerContent, 'utf-8');
+    await fs.writeFile(path.join(wikiDir, '_footer.md'), footerContent, 'utf-8');
     console.log('✓ Created _footer.md');
 
     // Create secure.md (protected page)
     const secureContent = `# Secure Page
 
-🔒 This is a protected page that requires authentication to view.
+This is a protected page that requires authentication to view.
 
 ## Authentication Status
 
@@ -347,7 +352,7 @@ This page is automatically protected when authentication is enabled in the Admin
 
 ## How Authentication Works
 
-1. Go to the **Admin Panel** (⚙️ button in the header)
+1. Go to the **Admin Panel** (gear button in the header)
 2. Navigate to the **Authentication** section
 3. Follow the setup instructions to configure Supabase
 4. Toggle **Enable Authentication** and save
@@ -357,16 +362,8 @@ This page is automatically protected when authentication is enabled in the Admin
 ## What's Protected
 
 When authentication is enabled, this "Secure" page requires login to view. You can add more pages to the protected list by editing the configuration.
-
-## Managing Users
-
-Once Supabase is configured, you can manage users through the links in the Admin panel:
-- Add new users
-- Reset passwords
-- Configure security policies
-- Set up email templates
 `;
-    await fs.writeFile(path.join(PAGES_DIR, 'secure.md'), secureContent, 'utf-8');
+    await fs.writeFile(path.join(pagesDir, 'secure.md'), secureContent, 'utf-8');
     console.log('✓ Created secure.md (protected page)');
 
     // Create _config.json
@@ -381,7 +378,7 @@ Once Supabase is configured, you can manage users through the links in the Admin
       authEnabled: false,
       protectedPages: ["secure"]
     };
-    await fs.writeFile(path.join(WIKI_DIR, '_config.json'), JSON.stringify(config, null, 2), 'utf-8');
+    await fs.writeFile(path.join(wikiDir, '_config.json'), JSON.stringify(config, null, 2), 'utf-8');
     console.log('✓ Created _config.json');
 
     console.log('✓ Wiki initialization complete!');
@@ -1644,4 +1641,4 @@ if (require.main === module) {
 }
 
 // Export for unit testing
-module.exports = { sanitize, imageFilter };
+module.exports = { sanitize, imageFilter, initializeWiki };
