@@ -184,15 +184,17 @@ async function loadPage(path) {
                 return;
             }
             if (response.status === 401) {
-                const errorData = await response.json();
+                const errorData = await response.json().catch(() => ({}));
                 content.innerHTML = `
                     <div style="text-align: center; padding: 2rem;">
-                        <h1>🔒 Authentication Required</h1>
-                        <p>${errorData.message || 'This page requires authentication to view.'}</p>
-                        <button onclick="openModal('loginModal')" class="btn btn-primary">Log In</button>
+                        <h1>&#x1F512; Authentication Required</h1>
+                        <p>${errorData.error || 'This page requires authentication to view.'}</p>
+                        <button id="securePageLoginBtn" class="btn btn-primary">Log In</button>
                     </div>
                 `;
                 footer.innerHTML = '';
+                document.getElementById('securePageLoginBtn')
+                    .addEventListener('click', () => openModal('loginModal'));
                 return;
             }
             throw new Error('Failed to load page');
