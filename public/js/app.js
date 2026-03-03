@@ -29,6 +29,13 @@ const editMode = document.getElementById('editMode');
 const editor = document.getElementById('editor');
 const notification = document.getElementById('notification');
 
+// Show/hide the Admin button based on local admin session or Supabase wiki-admin status
+function updateAdminButtonVisibility() {
+    const show = !!(window.localAdminLoggedIn || window.supabaseIsWikiAdmin);
+    const btn = document.getElementById('adminBtn');
+    if (btn) btn.style.display = show ? '' : 'none';
+}
+
 // Authenticated fetch — attaches the Supabase Bearer token (if available) and
 // always sends credentials (cookies) so the local admin session also works.
 async function authFetch(url, options = {}) {
@@ -50,10 +57,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupEventListeners();
     loadAppearanceSettings();
     loadLogo();
+    checkAdminStatus();
 
     // Handle browser back/forward
     window.addEventListener('popstate', handleRouting);
 });
+
+// Check admin status on page load to show/hide admin button
+async function checkAdminStatus() {
+    try {
+        const resp = await authFetch('/api/auth/config');
+        if (!resp.ok) return;
+        const cfg = await resp.json();
+        window.localAdminLoggedIn = cfg.localAdminLoggedIn;
+        if (cfg.isWikiAdmin) window.supabaseIsWikiAdmin = true;
+        updateAdminButtonVisibility();
+    } catch { /* ignore */ }
+}
 
 // Event Listeners
 function setupEventListeners() {
@@ -100,6 +120,7 @@ function setupEventListeners() {
     // Auth configuration
     document.getElementById('saveAuthConfigBtn').addEventListener('click', saveAuthConfig);
     document.getElementById('saveSupabaseConfigBtn').addEventListener('click', saveSupabaseConfig);
+    document.getElementById('saveUserRolesBtn').addEventListener('click', saveUserRoles);
 
     // Appearance controls
     document.getElementById('applyAppearanceBtn').addEventListener('click', applyAppearance);
@@ -956,8 +977,9 @@ function openAdmin() {
     // Reload logo preview in admin panel
     loadLogo();
 
-    // Load auth configuration status
+    // Load auth configuration status and user management
     loadAuthStatus();
+    loadUserManagement();
 }
 
 function exitAdmin() {
@@ -1078,13 +1100,17 @@ function handleAuthFailure(status) {
 // Auth Configuration Management
 async function loadAuthStatus() {
     try {
-        const response = await fetch('/api/auth/config', { credentials: 'same-origin' });
+        const response = await authFetch('/api/auth/config');
         const authConfig = await response.json();
+
+        // Track local admin state globally so updateAdminButtonVisibility can read it
+        window.localAdminLoggedIn = authConfig.localAdminLoggedIn;
+        updateAdminButtonVisibility();
 
         // Show session-expired banner and disable write buttons when not logged in
         const banner = document.getElementById('adminSessionBanner');
         const loginLink = document.getElementById('adminLoginLink');
-        const isLoggedIn = authConfig.localAdminLoggedIn;
+        const isLoggedIn = authConfig.localAdminLoggedIn || authConfig.isWikiAdmin;
 
         if (!isLoggedIn) {
             loginLink.href = (window.APP_BASE || '') + '/admin-login';
@@ -1097,6 +1123,7 @@ async function loadAuthStatus() {
         const writeButtons = [
             'saveAuthConfigBtn', 'saveSupabaseConfigBtn', 'saveSpecialPageBtn',
             'saveConfigBtn', 'editConfigBtn', 'uploadLogoBtn', 'deleteLogoBtn',
+            'saveUserRolesBtn',
         ];
         writeButtons.forEach(id => {
             const el = document.getElementById(id);
@@ -1134,6 +1161,53 @@ async function loadAuthStatus() {
     } catch (error) {
         console.error('Error loading auth status:', error);
     }
+}
+
+// User management
+async function loadUserManagement() {
+    const container = document.getElementById('usersList');
+    if (!container) return;
+    container.innerHTML = '<p class="help-text">Loading…</p>';
+    try {
+        const resp = await authFetch('/api/admin/users');
+        if (!resp.ok) { container.innerHTML = '<p class="help-text">Not available.</p>'; return; }
+        const { users } = await resp.json();
+        if (!users || !users.length) {
+            container.innerHTML = '<p class="help-text">No users have signed in yet.</p>';
+            return;
+        }
+        container.innerHTML = `
+            <table class="user-table">
+                <thead><tr><th>User</th><th>Provider</th><th>Last Seen</th><th>Wiki Admin</th></tr></thead>
+                <tbody>
+                    ${users.map(u => `
+                    <tr>
+                        <td>${u.email}</td>
+                        <td>${u.provider}</td>
+                        <td>${new Date(u.lastSeen).toLocaleDateString()}</td>
+                        <td style="text-align:center;">
+                            <input type="checkbox" class="user-admin-check" data-id="${u.id}" ${u.isAdmin ? 'checked' : ''}>
+                        </td>
+                    </tr>`).join('')}
+                </tbody>
+            </table>`;
+    } catch {
+        container.innerHTML = '<p class="help-text">Could not load users.</p>';
+    }
+}
+
+async function saveUserRoles() {
+    const updates = [...document.querySelectorAll('.user-admin-check')].map(cb => ({
+        id: cb.dataset.id,
+        isAdmin: cb.checked,
+    }));
+    const resp = await authFetch('/api/admin/users/roles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ updates }),
+    });
+    if (!resp.ok) { if (handleAuthFailure(resp.status)) return; }
+    showNotification('User roles saved.', 'success');
 }
 
 async function saveSupabaseConfig() {

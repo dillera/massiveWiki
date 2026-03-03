@@ -33,20 +33,44 @@ async function initializeAuth() {
         if (session) {
             currentUser = session.user;
             updateAuthUI(true);
+            try {
+                const resp = await fetch('/api/auth/session', {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${session.access_token}` },
+                    credentials: 'same-origin',
+                });
+                const data = await resp.json();
+                window.supabaseIsWikiAdmin = data.isWikiAdmin || false;
+            } catch { window.supabaseIsWikiAdmin = false; }
+            if (typeof updateAdminButtonVisibility === 'function') updateAdminButtonVisibility();
         } else {
+            window.supabaseIsWikiAdmin = false;
             updateAuthUI(false);
+            if (typeof updateAdminButtonVisibility === 'function') updateAdminButtonVisibility();
         }
 
         // Listen for auth changes
-        supabaseClient.auth.onAuthStateChange((event, session) => {
+        supabaseClient.auth.onAuthStateChange(async (event, session) => {
             console.log('Auth state changed:', event);
 
             if (session) {
                 currentUser = session.user;
                 updateAuthUI(true);
+                try {
+                    const resp = await fetch('/api/auth/session', {
+                        method: 'POST',
+                        headers: { Authorization: `Bearer ${session.access_token}` },
+                        credentials: 'same-origin',
+                    });
+                    const data = await resp.json();
+                    window.supabaseIsWikiAdmin = data.isWikiAdmin || false;
+                } catch { window.supabaseIsWikiAdmin = false; }
+                if (typeof updateAdminButtonVisibility === 'function') updateAdminButtonVisibility();
             } else {
                 currentUser = null;
+                window.supabaseIsWikiAdmin = false;
                 updateAuthUI(false);
+                if (typeof updateAdminButtonVisibility === 'function') updateAdminButtonVisibility();
             }
         });
 

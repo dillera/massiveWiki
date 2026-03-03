@@ -165,6 +165,22 @@ async function requireAuth(req, res, next) {
   next();
 }
 
+// Middleware: require local admin OR a Supabase user with isAdmin:true in _users.json
+async function requireWikiAdmin(req, res, next) {
+  if (req.session && req.session.adminLoggedIn) {
+    req.user = { email: req.session.adminUser.email, isLocalAdmin: true };
+    return next();
+  }
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
+    return res.status(503).json({ error: 'Authentication not configured.' });
+  }
+  const user = await verifyAuth(req);
+  if (!user) return res.status(401).json({ error: 'Authentication required' });
+  if (!isWikiAdmin(user.id)) return res.status(403).json({ error: 'Admin access required' });
+  req.user = user;
+  next();
+}
+
 // Resolve a user-supplied relative path against a trusted base directory.
 // Returns the resolved absolute path, or null if the path would escape baseDir.
 function safePath(baseDir, userInput) {
@@ -194,6 +210,37 @@ const PAGES_DIR = path.join(WIKI_HOME, 'pages');
 const IMAGES_DIR = path.join(WIKI_HOME, 'images');
 const WIKI_DIR = path.join(WIKI_HOME, '_wiki');
 const ADMIN_FILE = path.join(WIKI_HOME, '_wiki', '_admin.json');
+const USERS_FILE = path.join(WIKI_DIR, '_users.json');
+
+function loadUsers() {
+  try { return JSON.parse(fsSync.readFileSync(USERS_FILE, 'utf8')); }
+  catch { return { users: [] }; }
+}
+function saveUsers(data) {
+  fsSync.writeFileSync(USERS_FILE, JSON.stringify(data, null, 2), { mode: 0o600 });
+}
+function isWikiAdmin(userId) {
+  return loadUsers().users.some(u => u.id === userId && u.isAdmin);
+}
+function recordUser(user) {
+  const data = loadUsers();
+  const now = new Date().toISOString();
+  const existing = data.users.find(u => u.id === user.id);
+  if (existing) {
+    existing.lastSeen = now;
+    existing.email = user.email;
+  } else {
+    data.users.push({
+      id: user.id,
+      email: user.email,
+      provider: user.app_metadata?.provider || 'unknown',
+      isAdmin: false,
+      firstSeen: now,
+      lastSeen: now,
+    });
+  }
+  saveUsers(data);
+}
 
 // Returns true once the admin account has been created via /setup
 function isAdminConfigured() {
@@ -1221,7 +1268,7 @@ app.get('/api/special/:page', async (req, res) => {
 });
 
 // API: Save special page
-app.post('/api/special/:page', requireAuth, async (req, res) => {
+app.post('/api/special/:page', requireWikiAdmin, async (req, res) => {
   try {
     const { page } = req.params;
     const { content } = req.body;
@@ -1271,7 +1318,7 @@ app.get('/api/config', async (req, res) => {
 });
 
 // API: Save config
-app.post('/api/config', requireAuth, async (req, res) => {
+app.post('/api/config', requireWikiAdmin, async (req, res) => {
   try {
     const config = req.body;
 
@@ -1300,6 +1347,13 @@ app.get('/api/auth/config', async (req, res) => {
       authEnabled = false;
     }
 
+    let isWikiAdminUser = false;
+    const authUser = await verifyAuth(req);
+    if (authUser) {
+      recordUser(authUser);
+      isWikiAdminUser = isWikiAdmin(authUser.id);
+    }
+
     res.json({
       authEnabled,
       supabaseUrl: process.env.SUPABASE_URL || null,
@@ -1308,6 +1362,7 @@ app.get('/api/auth/config', async (req, res) => {
       localAdminConfigured: isAdminConfigured(),
       localAdminLoggedIn: !!(req.session && req.session.adminLoggedIn),
       baseUrl: process.env.BASE_URL || null,
+      isWikiAdmin: isWikiAdminUser,
     });
   } catch (error) {
     console.error('Error loading auth config:', error);
@@ -1315,8 +1370,34 @@ app.get('/api/auth/config', async (req, res) => {
   }
 });
 
+// API: Register Supabase user with wiki server and return admin status
+app.post('/api/auth/session', async (req, res) => {
+  const user = await verifyAuth(req);
+  if (!user) return res.status(401).json({ error: 'Invalid token' });
+  recordUser(user);
+  res.json({ success: true, isWikiAdmin: isWikiAdmin(user.id) });
+});
+
+// API: Get user list (wiki admins only)
+app.get('/api/admin/users', requireWikiAdmin, (req, res) => {
+  res.json(loadUsers());
+});
+
+// API: Update user roles (wiki admins only)
+app.post('/api/admin/users/roles', requireWikiAdmin, express.json(), (req, res) => {
+  const { updates } = req.body;
+  if (!Array.isArray(updates)) return res.status(400).json({ error: 'updates must be an array' });
+  const data = loadUsers();
+  updates.forEach(({ id, isAdmin }) => {
+    const u = data.users.find(u => u.id === id);
+    if (u) u.isAdmin = !!isAdmin;
+  });
+  saveUsers(data);
+  res.json({ success: true });
+});
+
 // API: Save Supabase credentials — writes to .env and hot-reloads the client
-app.post('/api/auth/supabase-config', requireAuth, async (req, res) => {
+app.post('/api/auth/supabase-config', requireWikiAdmin, async (req, res) => {
   const { supabaseUrl, supabaseAnonKey } = req.body || {};
 
   if (!supabaseUrl || !supabaseAnonKey) {
@@ -1399,7 +1480,7 @@ app.get('/api/images', async (req, res) => {
 });
 
 // API: Upload logo
-app.post('/api/logo/upload', requireAuth, (req, res) => {
+app.post('/api/logo/upload', requireWikiAdmin, (req, res) => {
   upload.single('logo')(req, res, async (err) => {
     if (err) {
       console.error('Multer error:', err);
@@ -1453,7 +1534,7 @@ app.get('/api/logo', async (req, res) => {
 });
 
 // API: Delete logo
-app.delete('/api/logo', requireAuth, async (req, res) => {
+app.delete('/api/logo', requireWikiAdmin, async (req, res) => {
   try {
     const files = await fs.readdir(IMAGES_DIR);
     const existingLogos = files.filter(f => f.startsWith('_logo.'));

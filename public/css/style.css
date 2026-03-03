@@ -1037,6 +1037,12 @@ body {
 .btn-github { background: #24292e; color: #fff; border-color: #24292e; }
 .btn-discord { background: #5865F2; color: #fff; border-color: #5865F2; }
 
+/* ── User Management Table ───────────────────────────────────────────────── */
+.user-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.user-table th { text-align: left; padding: 0.3rem 0.5rem; color: var(--text-3); font-weight: 600; border-bottom: 1px solid var(--border); }
+.user-table td { padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--bg-subtle); }
+.user-table tr:last-child td { border-bottom: none; }
+
 /* ── Responsive ──────────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
     .sidebar {
