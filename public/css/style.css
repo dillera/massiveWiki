@@ -875,6 +875,23 @@ body {
 }
 .modal-close:hover { background: var(--bg-subtle); color: var(--text); }
 
+/* Cancel buttons in modal footers carry both .modal-close and .btn —
+   reset the icon-button sizing so they render as normal buttons. */
+button.modal-close.btn {
+    width: auto;
+    height: auto;
+    display: inline-flex;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-size: 0.8rem;
+}
+button.modal-close.btn:hover {
+    background: var(--bg-subtle);
+    border-color: var(--border-strong);
+    color: var(--text);
+}
+
 .modal-body {
     padding: 0.85rem 1rem;
 }
