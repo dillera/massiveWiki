@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "test": "node test-tree-logic.js",
+    "test": "node test-tree-logic.js && node test-macros.js",
+    "test:macros": "node test-macros.js",
     "test:security": "node test-security.js",
     "test:init": "node test-init.js"
   },

@@ -673,6 +673,59 @@ async function processWikilinks(content, currentPagePath) {
   return processedContent;
 }
 
+// Macro expansion helpers
+
+async function collectDescendants(dir, basePath, depth) {
+  const entries = await fs.readdir(dir, { withFileTypes: true });
+  const indent = '  '.repeat(depth);
+  const lines = [];
+
+  const mdFiles = entries
+    .filter(e => e.isFile() && e.name.endsWith('.md'))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const dirs = entries
+    .filter(e => e.isDirectory() && !e.name.startsWith('.'))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  for (const file of mdFiles) {
+    const name = file.name.slice(0, -3);
+    const childPath = `${basePath}/${name}`;
+    const displayName = name.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    lines.push(`${indent}- [[${childPath}|${displayName}]]`);
+
+    // page-parent pattern: if a same-named dir exists, recurse into it at depth+1
+    const matchingDir = dirs.find(d => d.name === name);
+    if (matchingDir) {
+      const sub = await collectDescendants(path.join(dir, name), childPath, depth + 1);
+      lines.push(...sub);
+    }
+  }
+
+  // Pure folders (no matching .md file) — recurse at same depth (transparent containers)
+  for (const d of dirs) {
+    if (!mdFiles.some(f => f.name.slice(0, -3) === d.name)) {
+      const sub = await collectDescendants(path.join(dir, d.name), `${basePath}/${d.name}`, depth);
+      lines.push(...sub);
+    }
+  }
+
+  return lines;
+}
+
+async function buildChildrenList(pagePath) {
+  const childDir = safePath(PAGES_DIR, pagePath);
+  if (!childDir) return '';
+  try { await fs.access(childDir); } catch { return ''; }
+  const lines = await collectDescendants(childDir, pagePath, 0);
+  return lines.join('\n');
+}
+
+async function expandMacros(content, pagePath) {
+  if (!content.includes('{{')) return content;
+  const childrenMd = await buildChildrenList(pagePath);
+  return content.replace(/\{\{children\}\}/gi, childrenMd);
+}
+
 // Helper function to check if a page exists
 async function pageExists(pagePath) {
   const filePath = safePath(PAGES_DIR, pagePath + '.md');
@@ -952,9 +1005,11 @@ app.get('/api/page/*', async (req, res) => {
       footerContent = parts[parts.length - 1];
     }
 
-    // Process wikilinks in main content and footer
-    const processedMain = await processWikilinks(mainContent, pagePath);
-    const processedFooter = footerContent ? await processWikilinks(footerContent, pagePath) : '';
+    // Expand macros then process wikilinks in main content and footer
+    const expandedMain = await expandMacros(mainContent, pagePath);
+    const expandedFooter = footerContent ? await expandMacros(footerContent, pagePath) : '';
+    const processedMain = await processWikilinks(expandedMain, pagePath);
+    const processedFooter = expandedFooter ? await processWikilinks(expandedFooter, pagePath) : '';
 
     // Convert to HTML and sanitize to prevent XSS
     const html = sanitize(marked.parse(processedMain));
